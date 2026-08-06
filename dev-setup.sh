@@ -380,7 +380,21 @@ git config --global gpg.format ssh
 git config --global user.signingkey "$PUB_FILE"
 git config --global commit.gpgsign true
 git config --global tag.gpgsign true
+
+# Signing and verifying are separate settings. Without an allowed signers file,
+# git signs correctly but reports "No signature" when asked to verify, which
+# reads as a signing failure and sends people chasing a problem they do not have.
+ALLOWED_SIGNERS="$HOME/.ssh/allowed_signers"
+touch "$ALLOWED_SIGNERS"
+chmod 600 "$ALLOWED_SIGNERS"
+SIGNER_LINE="$GIT_EMAIL $(cat "$PUB_FILE")"
+if ! grep -qxF "$SIGNER_LINE" "$ALLOWED_SIGNERS" 2>/dev/null; then
+  echo "$SIGNER_LINE" >> "$ALLOWED_SIGNERS"
+fi
+git config --global gpg.ssh.allowedSignersFile "$ALLOWED_SIGNERS"
+
 echo -e "  ${THEME_GREEN}✓${NC}  Every commit and tag will show Verified on GitHub."
+echo -e "  ${THEME_GREEN}✓${NC}  Local verification enabled: git log --show-signature works."
 
 echo ""
 step_info "Applying CoreDev git globals..."

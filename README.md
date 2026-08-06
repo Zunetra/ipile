@@ -1,1 +1,879 @@
-# dev-setup
+# ipile
+
+**Machine bootstrap.** One command that takes a fresh Linux or macOS
+machine and turns it into a working development machine: Rust, Node,
+pnpm, yarn, git, SSH keys, commit signing, git aliases, and a set of
+global editor and formatter configs.
+
+`ipile` is Yoruba for *foundation*. Plain ASCII everywhere a machine
+reads it, never the diacritic form. The workspace scaffolder and task
+runner is a separate tool, [culm](../culm).
+
+![Version](https://img.shields.io/badge/version-v3.0-blue)
+![Shell](https://img.shields.io/badge/shell-bash%204%2B-green)
+![License](https://img.shields.io/badge/license-MIT-green)
+
+> **Renamed on 2026-08-06.** This tool was called `dev-setup` and
+> installed to `$HOME/.shogo` under the command name `shogo`. If you
+> still have the old command, see
+> [Migrating from the old `shogo` command](#migrating-from-the-old-shogo-command).
+
+---
+
+## 📖 Table of contents
+
+- [What it is](#-what-it-is)
+- [Requirements](#-requirements)
+- [Install](#-install)
+- [Commands](#-commands)
+- [ipile dev-setup](#-ipile-dev-setup)
+- [ipile git-multiple-accounts](#-ipile-git-multiple-accounts)
+- [ipile doctor](#-ipile-doctor)
+- [ipile update, version, and help](#-ipile-update-version-and-help)
+- [Repository layout](#-repository-layout)
+- [Build and release](#-build-and-release)
+- [Troubleshooting](#-troubleshooting)
+- [Contributing](#-contributing)
+- [Licence](#-licence)
+
+## 🌍 What it is
+
+ipile is a set of bash scripts distributed as a tarball and dispatched
+through one command. There is no compiled binary and no package manager
+involvement. The installer downloads an archive, unpacks it into
+`$HOME/.ipile`, and symlinks one executable onto your `PATH`.
+
+Two of the scripts do the real work, and both are long, interactive, and
+phase-based. Each phase announces what it is about to do and offers to
+run or skip it, so nothing happens to your machine without a prompt in
+front of it.
+
+- **`dev-setup`** installs and configures toolchains: system packages,
+  Rust, Node, the JavaScript package managers, git identity with SSH
+  commit signing, and global config files.
+- **`git-multiple-accounts`** builds a complete multi-account git
+  workflow, so several GitHub identities can live on one machine with the
+  right one selected automatically per repository.
+
+Both are safe to re-run. Existing SSH keys are reused rather than
+clobbered, existing config blocks are detected before being appended, and
+every phase can be skipped.
+
+## ✅ Requirements
+
+| Requirement | Why |
+| --- | --- |
+| **bash 4 or newer** | The scripts use `${VAR,,}` lowercasing and bash arrays. macOS ships bash 3.x, so install a newer bash via Homebrew first |
+| **Linux (apt-based) or macOS** | Both scripts detect `$OSTYPE` and exit on anything else |
+| **`sudo`** on Linux | The `apt-get` install and upgrade steps need it |
+| **`curl`** | Used for the install, the internet pre-flight check, and every remote installer |
+| **`git`** | Installed by the scripts if missing, but `git-multiple-accounts` reads existing config with it |
+| **`ssh` and `ssh-keygen`** | Key generation, the agent, and the connection test |
+| **A GitHub account** | Both scripts pause and wait for you to paste a public key into GitHub |
+
+### Platform support, precisely
+
+The OS detection in both scripts is the same:
+
+```bash
+if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+  OS="linux"
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+  OS="mac"
+else
+  echo "Unsupported OS: ${OSTYPE}. Exiting."
+  exit 1
+fi
+```
+
+On **Linux** the package manager is `apt-get`, hard-coded. Debian and
+Ubuntu derivatives work. Fedora, Arch, and Alpine do not, and the system
+phase will fail on them.
+
+On **macOS** the package manager is Homebrew, and both scripts install
+Homebrew themselves if it is missing.
+
+Windows is not supported in any form.
+
+Running as root is detected and warned about, and needs an explicit `y`
+to continue.
+
+## 🚀 Install
+
+```sh
+curl -fsSL https://shogo-portfolio-ebon.vercel.app/scripts/installer.sh | sh
+```
+
+Then restart your shell, or source your rc file, and run:
+
+```sh
+ipile dev-setup
+```
+
+### What the installer does
+
+`installer.sh` is short and does exactly four things:
+
+| Step | Effect |
+| --- | --- |
+| 1 | `mkdir -p "$HOME/.ipile" "$HOME/.local/bin"` |
+| 2 | Downloads `ipile.tar.gz` to `/tmp/ipile.tar.gz` and unpacks it into `$HOME/.ipile` with `--overwrite` |
+| 3 | `ln -sf "$HOME/.ipile/bin/ipile" "$HOME/.local/bin/ipile"` |
+| 4 | If `$HOME/.local/bin` is not already on `$PATH`, appends `export PATH="$HOME/.local/bin:$PATH"` to `~/.bashrc` and to `~/.zshrc` |
+
+### What lands on disk
+
+```
+$HOME/.ipile/
+├── bin/
+│   └── ipile                      # The dispatcher, and the only thing on your PATH
+├── lib/
+│   ├── setup.sh                   # dev-setup.sh, renamed at build time
+│   ├── git-multiple-accounts.sh   # Copied verbatim
+│   ├── doctor.sh                  # Generated by the build script
+│   └── update.sh                  # Generated by the build script
+└── VERSION                        # The version string this install was built from
+
+$HOME/.local/bin/ipile             # Symlink to $HOME/.ipile/bin/ipile
+```
+
+Nothing is installed system-wide, and nothing needs `sudo` to install.
+`sudo` is only used later, by `dev-setup`, for `apt-get`.
+
+### Uninstall
+
+```sh
+rm -rf "$HOME/.ipile"
+rm -f "$HOME/.local/bin/ipile"
+```
+
+That removes ipile itself. It does not undo anything `dev-setup` or
+`git-multiple-accounts` configured, since those write into your git
+config, your `~/.ssh`, and your home directory.
+
+## 🧭 Commands
+
+Everything goes through one dispatcher, `bin/ipile`. It takes one
+argument and defaults to `help`.
+
+| Command | Alias | What it does |
+| --- | --- | --- |
+| `ipile dev-setup` | | Full machine bootstrap in six phases |
+| `ipile git-multiple-accounts` | `git-accounts` | Configure git identities and SSH keys, one account or many |
+| `ipile doctor` | | Report which of git, node, pnpm, rust, and ssh are present |
+| `ipile update` | | Compare the installed version against the published one and re-download if they differ |
+| `ipile version` | `--version` | Print the contents of `$HOME/.ipile/VERSION` |
+| `ipile help` | anything unrecognised | Print the command list |
+
+There are no flags. Every script is interactive, and choices are made at
+its prompts rather than on the command line.
+
+### Exit behaviour
+
+| Situation | Exit code |
+| --- | --- |
+| `help`, or an unrecognised command | `0`, after printing the command list |
+| Any dispatched script succeeding | `0` |
+| Unsupported OS in `dev-setup` or `git-multiple-accounts` | `1` |
+| Declining the root warning | `1` |
+| Any command failing inside a script | Non-zero. Every script runs under `set -euo pipefail` |
+
+### The update notice
+
+After any command other than `help`, the dispatcher fetches
+`version.txt` from the hosting URL and compares it against the local
+`VERSION` file. If they differ it prints:
+
+```
+Update available: v3.1  (run: ipile update)
+```
+
+The fetch is wrapped so a network failure produces an empty string and no
+notice, rather than an error. `help` exits before this check runs.
+
+## 📦 `ipile dev-setup`
+
+```sh
+ipile dev-setup
+```
+
+Six phases. Each one prints a heading, a description of exactly what it
+will do, and a `[1] Run / [2] Skip` prompt where pressing Enter runs it.
+Between phases it waits for Enter.
+
+### Pre-flight
+
+Before phase 1 it checks three things and prints the result of each:
+
+- **OS detection.** Exits on anything that is not Linux or macOS.
+- **Not root.** Warns and asks for confirmation if `id -u` is 0.
+- **Internet.** `curl -s --head --connect-timeout 5 https://google.com`.
+  A failure is a warning, not a stop.
+
+### Phase 1: System update and essentials
+
+| OS | What runs |
+| --- | --- |
+| Linux | `apt-get update`, `apt-get upgrade -y`, then `apt-get install -y curl wget git build-essential ca-certificates` |
+| macOS | Installs Homebrew if missing, then `brew update`, `brew upgrade`, then `brew install curl wget git` |
+
+GPG warnings from third-party apt repositories are treated as non-fatal.
+
+### Phase 2: Rust via rustup
+
+- Runs the official rustup installer with `-y`.
+- Sources `$HOME/.cargo/env` into the current shell, so later phases can
+  see `cargo`.
+- `rustup component add rustfmt clippy`.
+- Prints the installed `rustc` and `cargo` versions.
+
+### Phase 3: Node.js via nvm
+
+- Installs **nvm v0.40.4** from the nvm-sh repository.
+- Sources `$NVM_DIR/nvm.sh` and its bash completion into the current
+  shell.
+- `nvm install 24`, `nvm use 24`, `nvm alias default 24`.
+- Prints the installed `node` and `npm` versions.
+
+Node 24 is the version the script pins, described in its own banner as
+Active LTS.
+
+### Phase 4: Corepack, pnpm, and yarn
+
+- `corepack enable`.
+- `corepack prepare pnpm@latest --activate`.
+- `corepack prepare yarn@stable --activate`.
+- Prints the active `npm`, `pnpm`, and `yarn` versions.
+
+No `npm install -g` anywhere. Corepack ships with Node 16 and newer and
+manages the package manager shims itself.
+
+### Phase 5: Git, SSH, and commit signing
+
+The longest phase. In order:
+
+1. **Git check.** Upgrades git if present, installs it if not.
+2. **Three prompts**, each of which refuses an empty answer: full name,
+   GitHub username, and email address. The captured values are echoed
+   back for confirmation before anything is written.
+3. **Git identity.** `user.name` and `user.email`, set globally.
+4. **SSH key.** `~/.ssh` is created with mode `700`. An existing
+   `id_ed25519` is reused. Failing that, an existing `id_rsa` is reused.
+   Only with neither present does it generate a new ed25519 key, with an
+   empty passphrase and your email as the comment.
+5. **GitHub registration.** Prints the public key and step-by-step
+   instructions, then blocks until you type the literal word `done`.
+6. **ssh-agent.** Starts an agent and `ssh-add`s the key.
+7. **Connection test.** `ssh -T git@github.com`, reporting whether the
+   output contained `successfully authenticated`. A failure is a warning
+   with a manual retry command, not a stop.
+8. **Commit signing**, configured globally:
+
+   | Key | Value |
+   | --- | --- |
+   | `gpg.format` | `ssh` |
+   | `user.signingkey` | The public key file |
+   | `commit.gpgsign` | `true` |
+   | `tag.gpgsign` | `true` |
+   | `gpg.ssh.allowedSignersFile` | `~/.ssh/allowed_signers` |
+
+   The allowed signers file is created with mode `600` and gets an
+   `<email> <public key>` line appended if it is not already there.
+   **Signing and verifying are separate settings.** Without an allowed
+   signers file git signs correctly but reports "No signature" when asked
+   to verify, which reads as a signing failure and sends people chasing a
+   problem they do not have.
+
+9. **Git globals**, applied in four groups:
+
+   | Group | Settings |
+   | --- | --- |
+   | Core | `init.defaultBranch=main`, `core.editor="code --wait"`, `core.autocrlf=false`, `core.safecrlf=warn` |
+   | Pull, push, fetch | `pull.rebase=true`, `rebase.autoStash=true`, `push.default=current`, `push.autoSetupRemote=true`, `fetch.prune=true` |
+   | Merge and diff | `merge.conflictstyle=diff3`, `diff.colorMoved=zebra`, `rerere.enabled=true` |
+   | Colours and UX | `color.ui=auto`, `help.autocorrect=10`, `log.date=iso` |
+
+10. **Git aliases:**
+
+    | Alias | Expands to |
+    | --- | --- |
+    | `lg` | `log --oneline --graph --all --decorate` |
+    | `ll` | `log` with a short hash, subject, and relative date |
+    | `st` | `status --short --branch` |
+    | `co` | `checkout` |
+    | `br` | `branch --sort=-committerdate` |
+    | `undo` | `reset HEAD~1 --mixed` |
+    | `unstage` | `reset HEAD --` |
+    | `wip` | `!git add -A && git commit -m 'wip'` |
+    | `unwip` | `reset HEAD~1 --mixed` |
+    | `aliases` | `config --get-regexp ^alias\.` |
+
+### Phase 6: Global config files
+
+Writes five files into your home directory, each overwriting whatever was
+there.
+
+| File | Contents |
+| --- | --- |
+| `~/.vscode/settings.json` | Format on save, ESLint fix on save, TypeScript preferences, Prettier at 100 columns with single quotes, per-language formatter bindings for JS, TS, JSON, CSS, Markdown, Solidity, and Rust, rust-analyzer running clippy on save, file and search excludes, and file nesting patterns |
+| `~/.prettierrc` | Single quotes, trailing commas everywhere, 100 columns, two-space tabs, semicolons, LF endings, and the Solidity plugin |
+| `~/.solhint.json` | Extends `solhint:recommended`, with compiler version, function visibility, line length, and reason string rules adjusted |
+| `~/.lintstagedrc.json` | Prettier over JS, TS, JSON, CSS, SCSS, and Markdown, plus Prettier and `solhint --fix` over Solidity |
+| `~/.gitignore_global` | A long ignore file covering Linux, macOS, and Windows noise, five editors, merge artefacts, environment files, private keys, wallets and keystores, SSH keys, and build output for Node, Next, Nuxt, Remix, Rust, Solidity across three toolchains, Redis, databases, Python, Go, Java, .NET, Flutter, PHP, Ruby, WordPress, Docker, and package managers |
+
+The global gitignore is then registered:
+
+```sh
+git config --global core.excludesfile ~/.gitignore_global
+```
+
+### The summary
+
+The run ends with a panel showing the installed Rust, Node, pnpm, and git
+versions, the GitHub identity if phase 5 ran, whether signing is active,
+and the alias list. It then tells you to restart your terminal, restart
+VS Code, and offers a list of `code --install-extension` commands for
+rust-analyzer, Prettier, ESLint, hardhat-solidity, Volar, and cairo1.
+Those extensions are **not** installed for you.
+
+## 🔑 `ipile git-multiple-accounts`
+
+```sh
+ipile git-multiple-accounts
+# or
+ipile git-accounts
+```
+
+The problem it solves: holding several GitHub identities on one machine
+and never having to think about which one is active.
+
+### How it works
+
+**The glue is the SSH host alias.** Each account gets a named `Host`
+block in `~/.ssh/config` mapping a custom alias to `github.com` with a
+dedicated key:
+
+```
+Host github-personal
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/id_ed25519_personal
+```
+
+When you clone through the `gclone` helper instead of `git clone`, the
+URL is rewritten to use that alias:
+
+```
+gclone https://github.com/musathedev/my-repo.git
+  → pick identity
+  → git clone github-personal:musathedev/my-repo.git
+```
+
+The alias is now baked into that repository's `.git/config`. Every future
+push uses the right key, with no switching.
+
+```
+  ~/.gitidentities            one line per account, the single source of truth
+        │
+        ├──→  ~/.ssh/config             Host github-<alias> → github.com + its key
+        ├──→  ~/.gitconfig-<alias>      name, email, signing key for that identity
+        ├──→  ~/.git-hooks/pre-commit   reads the remote alias, sets local identity
+        ├──→  ~/.git-hooks/pre-push     prints who is pushing
+        ├──→  gclone                    rewrites a URL to an alias, then clones
+        └──→  gitprofile                manual override for the current shell
+```
+
+### The identity map
+
+`~/.gitidentities` is one pipe-delimited line per account:
+
+```
+github-personal|Musa The Dev|musa@email.com
+github-work|Moses Bamtefa|moses@work.com
+```
+
+The hooks, `gclone`, and `gitprofile` all read this one file. It can be
+hand-edited at any time to add, remove, or rename an entry.
+
+### Does it map directories to identities?
+
+**No.** There is no `includeIf` and no directory-based switching.
+Identity follows the **remote URL**, not where the repository sits on
+disk. A repository cloned as `github-work:...` commits as the work
+identity wherever it lives.
+
+For a repository whose remote carries no recognisable alias, an HTTPS
+clone or a brand new local repository, the pre-commit hook prompts once
+with a numbered list and writes the answer into that repository's local
+config. It never asks again.
+
+### The six phases
+
+#### Phase 1: Git
+
+Installs Homebrew on macOS if it is missing, then upgrades git if present
+or installs it if not.
+
+#### Phase 2: Identity discovery and account setup
+
+This phase is the substance of the script.
+
+1. **`~/.ssh` is prepared**, mode `700`, with `~/.ssh/config` created at
+   mode `600` and `~/.gitidentities` touched into existence.
+2. **Existing profiles are detected** by globbing `~/.gitconfig-*`. Each
+   is shown with the name and email read out of it, and you are offered
+   the chance to rename it. A rename moves the gitconfig file, moves both
+   halves of the SSH key pair, rewrites the `Host` block and the
+   `IdentityFile` line in `~/.ssh/config`, and rewrites the line in
+   `~/.gitidentities`. Nothing is lost.
+3. **An orphan global identity is folded in.** If
+   `git config --global user.name` is set but no `~/.gitconfig-*`
+   profiles exist, you are asked for an alias, and that existing identity
+   becomes a proper named profile with a gitconfig file, an SSH config
+   block, and an identity map line.
+4. **You are asked how many new accounts to add**, where `0` is a valid
+   answer. Running the script only to rename or fold in what already
+   exists is a supported path.
+5. **Each new account** is collected as four required fields: alias, full
+   name, GitHub username, and email. All of them are echoed back for
+   confirmation before any of them is acted on.
+6. **Then, per account:**
+
+   | Step | What happens |
+   | --- | --- |
+   | SSH key | `~/.ssh/id_ed25519_<alias>`, generated with an empty passphrase and the email as the comment. An existing key at that path prompts before being overwritten, and the default is to reuse it |
+   | SSH config | A `Host github-<alias>` block is appended, unless one is already there |
+   | GitHub | The public key is printed and the script blocks until you type `done`. You are told to add it **twice**, once as an Authentication Key and once as a Signing Key |
+   | Agent | `ssh-agent` is started and the key added |
+   | Test | `ssh -T git@github-<alias>`, reported as verified or as a warning with a manual retry command |
+   | Profile config | `~/.gitconfig-<alias>` is written with `user.name`, `user.email`, `user.signingkey`, `gpg.format=ssh`, `commit.gpgsign=true`, and `tag.gpgsign=true` |
+   | Identity map | A `github-<alias>\|<name>\|<email>` line is appended if absent |
+
+7. **A global default is chosen** from a numbered list of every identity.
+   That identity's name, email, and signing key go into the global git
+   config, with signing enabled. Any repository that bypasses the hook
+   system still commits under a known identity rather than a blank name.
+
+#### Phase 3: Hook system and shell helpers
+
+**`~/.git-hooks/pre-commit`**, written and marked executable:
+
+1. If `user.name` is already set locally for this repository, exit `0`
+   silently.
+2. Read `git remote get-url origin` and parse a leading `github-*` alias
+   out of it.
+3. Look that alias up in `~/.gitidentities`.
+4. Set `user.name`, `user.email`, and, if the matching public key exists,
+   `gpg.format`, `user.signingkey`, `commit.gpgsign`, and `tag.gpgsign`,
+   all **locally**.
+5. Print `Identity set: ...` once, and never ask again for that
+   repository.
+6. If no alias is found, print a numbered list and prompt once. Same
+   result.
+
+In both branches it then chains to `.git/hooks/pre-commit` if that file
+exists and is executable, so a repository's own hook still runs.
+
+**`~/.git-hooks/pre-push`** prints, before every push:
+
+```
+  →  Pushing to origin as: Musa The Dev <musa@email.com>
+```
+
+Both are registered with:
+
+```sh
+git config --global core.hooksPath "$HOME/.git-hooks"
+```
+
+**Two shell functions** are appended to `~/.zshrc` if it exists,
+otherwise `~/.bashrc`. Each is guarded by a `grep` for its own name, so
+re-running does not duplicate them. If neither rc file exists, the script
+warns and moves on.
+
+`gclone <url> [extra git clone args]`
+
+| Behaviour | Detail |
+| --- | --- |
+| Lists identities | A numbered menu read from `~/.gitidentities` |
+| Rewrites GitHub URLs | Both `git@github.com:` and `https://github.com/` forms, appending `.git` if absent |
+| Non-GitHub URLs | Cloned as-is, with a note that identity will be set on first commit |
+| Prints | `Cloning as: <name> (<alias>)` and the rewritten URL |
+| Passes through | Everything after the URL goes to `git clone` |
+
+`gitprofile [alias]`
+
+| Invocation | Behaviour |
+| --- | --- |
+| `gitprofile` | Lists every profile with its name and email, marking the one matching the current global identity as `(active)` |
+| `gitprofile <alias>` | Exports `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, and `GIT_COMMITTER_EMAIL` from `~/.gitconfig-<alias>` |
+| Unknown alias | Prints the name and tells you to run `gitprofile` to list |
+
+`gitprofile` affects **the current shell session only**, through
+environment variables. It is the manual fallback for repositories cloned
+before this system existed, or when you need to override the hook.
+
+#### Phase 4: Git globals
+
+The same core, pull, push, merge, diff, colour, and alias settings as
+`dev-setup` phase 5, plus one extra alias:
+
+| Alias | Expands to |
+| --- | --- |
+| `whoami` | `!git config user.name && git config user.email` |
+
+#### Phase 5: Global config files
+
+Writes six files, one more than `dev-setup` writes:
+
+| File | Difference from `dev-setup` |
+| --- | --- |
+| `~/.vscode/settings.json` | A larger version, with section comments, Tailwind class regexes, `typescript.preferences.importModuleSpecifier`, an Emmet mapping, a terminal profile, and an empty `cSpell.words` |
+| `~/.vscode/extensions.json` | **Only written here.** Twenty-two recommended extensions grouped by concern, plus two unwanted ones |
+| `~/.prettierrc` | Identical |
+| `~/.solhint.json` | Identical |
+| `~/.lintstagedrc.json` | Identical |
+| `~/.gitignore_global` | Effectively identical, and registered as `core.excludesfile` the same way |
+
+#### Phase 6: Summary
+
+Prints a panel listing the git version, the installed hooks, the shell
+helpers, the aliases, and then every configured profile with its name,
+email, SSH key path, and a `(global default)` marker on the active one.
+Then a short usage crib and the same restart-your-terminal instructions.
+
+### Everyday use, after setup
+
+```sh
+# Clone as a chosen identity
+gclone https://github.com/acme/api
+
+# See who is committing in this repository
+git whoami
+
+# List profiles, with the active one marked
+gitprofile
+
+# Override for this shell session only
+gitprofile work
+
+# Add or remove a profile by hand at any time
+$EDITOR ~/.gitidentities
+```
+
+## 🩺 `ipile doctor`
+
+```sh
+ipile doctor
+```
+
+A read-only check. It touches nothing and installs nothing.
+
+```
+Running diagnostics...
+
+  [ok] git <version>
+  [ok] node <version>
+  [ok] pnpm <version>
+  [!!] rust - not found
+  [ok] ssh
+
+Run 'ipile dev-setup' to install anything missing.
+```
+
+| Checked | How |
+| --- | --- |
+| `git` | `git --version`, third field |
+| `node` | `node -v` |
+| `pnpm` | `pnpm -v` |
+| `rust` | `rustc -V`, second field |
+| `ssh` | Presence only, no version |
+
+Anything missing prints `[!!] <name> - not found`. The command still
+exits `0`, so it is a report rather than a gate.
+
+## 🔄 `ipile update`, `version`, and `help`
+
+### `ipile update`
+
+Prints the current and latest versions, and stops if they match.
+Otherwise it downloads `ipile.tar.gz`, unpacks it over `$HOME/.ipile`,
+writes the new version into `VERSION`, and tells you to restart your
+terminal.
+
+```
+Current: v3.0
+Latest:  v3.1
+Updating ipile...
+Updated to v3.1. Restart your terminal.
+```
+
+An unreachable host makes `LATEST` the string `unknown`, which will not
+match a real version, so the update proceeds and then fails on the
+download rather than silently doing nothing.
+
+### `ipile version`
+
+Prints `$HOME/.ipile/VERSION`, or `unknown` if that file is missing.
+`--version` is accepted as the same thing.
+
+### `ipile help`
+
+Prints the command list. This is also what any unrecognised argument
+does, and it is the only command that exits before the update check.
+
+## 🗂️ Repository layout
+
+| File | Role |
+| --- | --- |
+| `installer.sh` | What the curl one-liner runs. Downloads, unpacks, symlinks, and patches `PATH` |
+| `build-and-install.sh` | Builds `ipile.tar.gz`. Generates the dispatcher, `doctor.sh`, and `update.sh` inline, and copies the two long scripts in |
+| `dev-setup.sh` | The machine bootstrap. Shipped inside the tarball as `lib/setup.sh` |
+| `git-multiple-accounts.sh` | The multi-account git setup. Shipped as `lib/git-multiple-accounts.sh` |
+| `version.txt` | The published version string. Polled by the update check |
+| `ipile.tar.gz` | The built artefact, committed so the host can serve it |
+| `LICENSE` | MIT |
+| `README.md` | This file |
+
+`bin/ipile`, `lib/doctor.sh`, `lib/update.sh`, and `VERSION` do not exist
+as files in this repository. They are heredocs inside
+`build-and-install.sh` and only exist inside the tarball.
+
+## 🔨 Build and release
+
+```sh
+bash build-and-install.sh
+```
+
+The script:
+
+1. Creates a temporary build directory, cleaned up on exit by a `trap`.
+2. Writes `bin/ipile`, the dispatcher, from a quoted heredoc, then
+   substitutes the hosting URL into its `BASE_URL_PLACEHOLDER` token with
+   `sed`.
+3. Copies `dev-setup.sh` in as `lib/setup.sh`, and
+   `git-multiple-accounts.sh` in unchanged.
+4. Writes `lib/doctor.sh` and `lib/update.sh` from heredocs, with the
+   hosting URL interpolated into the latter.
+5. Writes the version string to `VERSION`.
+6. `chmod +x` on the dispatcher and every `lib/*.sh`.
+7. `tar -czf` the whole tree into `ipile.tar.gz`.
+
+Two variables at the top of the script control the release:
+
+| Variable | Current value | Effect |
+| --- | --- | --- |
+| `BASE_URL` | `https://shogo-portfolio-ebon.vercel.app/scripts` | Where the installer, tarball, and `version.txt` are fetched from |
+| `VERSION` | `v3.0` | Written into `VERSION` inside the tarball |
+
+### Releasing a new version
+
+1. Edit the scripts.
+2. Bump `VERSION` in `build-and-install.sh`.
+3. Write the same string into `version.txt`.
+4. Run `bash build-and-install.sh`.
+5. Push. The files are served from the `BASE_URL` host, which picks up
+   `public/scripts/` automatically.
+
+**`version.txt` and the built `VERSION` must match.** The dispatcher
+compares the `VERSION` inside your install against the published
+`version.txt`. If they drift, every command prints an update notice that
+`ipile update` cannot resolve.
+
+The build script expects to live two levels below the repository root, at
+`public/scripts/`, which is where these files sit in the portfolio
+repository that hosts them.
+
+### The four served files
+
+| URL | Purpose |
+| --- | --- |
+| `$BASE_URL/installer.sh` | The curl one-liner target |
+| `$BASE_URL/ipile.tar.gz` | Fetched by the installer and by `ipile update` |
+| `$BASE_URL/version.txt` | Polled by the update check and by `ipile update` |
+| `$BASE_URL/dev-setup.sh` | The bootstrap script, also served standalone |
+
+## 🔧 Troubleshooting
+
+### `ipile: command not found` right after installing
+
+The installer appends `export PATH="$HOME/.local/bin:$PATH"` to your rc
+files, but a shell that is already running does not re-read them. Either
+restart your terminal, or source the file directly:
+
+```sh
+source ~/.bashrc     # or ~/.zshrc
+ipile version
+```
+
+If it is still not found, check the symlink exists and points somewhere
+real:
+
+```sh
+ls -l "$HOME/.local/bin/ipile"
+```
+
+### Migrating from the old `shogo` command
+
+This tool was `dev-setup`, installed at `$HOME/.shogo` under the command
+`shogo`, until 2026-08-06. The rename is not migrated automatically, and
+nothing removes the old install. Re-run the installer, then clean up:
+
+```sh
+# Install the new one
+curl -fsSL https://shogo-portfolio-ebon.vercel.app/scripts/installer.sh | sh
+
+# Remove the old one
+rm -rf "$HOME/.shogo"
+rm -f "$HOME/.local/bin/shogo"
+
+# Restart the shell, then
+ipile version
+```
+
+Nothing `dev-setup` previously configured needs redoing. Your git config,
+SSH keys, hooks, and home-directory config files are untouched by the
+rename, because none of them lived under `$HOME/.shogo`.
+
+### The PATH line was appended twice
+
+The installer only appends when `$HOME/.local/bin` is absent from the
+current `$PATH`. If you install from a shell where it is already present,
+nothing is appended. If you install twice from fresh shells before ever
+restarting, it can be appended twice. Harmless, and removable by hand
+from `~/.bashrc` and `~/.zshrc`.
+
+### `Unsupported OS: <something>. Exiting.`
+
+Only `linux-gnu*` and `darwin*` are recognised. On Linux the package
+manager is `apt-get`, so a non-apt distribution gets past OS detection
+and then fails in phase 1. Skip that phase and install the essentials
+yourself.
+
+### bash 3 errors on macOS
+
+The scripts use `${VAR,,}` and bash arrays, which are bash 4 features.
+macOS ships bash 3.2. Install a newer bash and run the script under it:
+
+```sh
+brew install bash
+/opt/homebrew/bin/bash "$HOME/.ipile/lib/setup.sh"
+```
+
+### `ipile update` says "Already up to date" but the scripts look old
+
+The comparison is between `$HOME/.ipile/VERSION` and the published
+`version.txt`, both plain strings. If a release changed the scripts
+without bumping the version, the check cannot see it. Force it:
+
+```sh
+curl -fsSL https://shogo-portfolio-ebon.vercel.app/scripts/ipile.tar.gz -o /tmp/ipile.tar.gz
+tar -xzf /tmp/ipile.tar.gz -C "$HOME/.ipile" --overwrite
+```
+
+### Commits are signed but GitHub shows them unverified
+
+The public key has to be registered on GitHub **twice**, once as an
+Authentication Key and once as a Signing Key. `dev-setup` phase 5 only
+instructs you to add it as an Authentication Key.
+`git-multiple-accounts` phase 2 instructs you to add both, and both are
+what signing actually needs.
+
+### `git log --show-signature` reports "No signature"
+
+Signing and verifying are separate settings.
+`gpg.ssh.allowedSignersFile` has to point at a file containing an
+`<email> <public key>` line. `dev-setup` writes
+`~/.ssh/allowed_signers` and registers it. `git-multiple-accounts` does
+not, so a machine set up only with the latter signs correctly and still
+fails to verify locally. Fix it by hand:
+
+```sh
+printf '%s %s\n' "you@example.com" "$(cat ~/.ssh/id_ed25519_work.pub)" \
+  >> ~/.ssh/allowed_signers
+chmod 600 ~/.ssh/allowed_signers
+git config --global gpg.ssh.allowedSignersFile ~/.ssh/allowed_signers
+```
+
+### `gclone` and `gitprofile` are not defined
+
+They are appended to `~/.zshrc` if it exists, otherwise `~/.bashrc`. If
+you use a different shell, or neither file existed at the time, the
+script warns and skips them. Restart the shell first. If they are still
+missing, find which file they landed in:
+
+```sh
+grep -l 'gclone()' ~/.zshrc ~/.bashrc 2>/dev/null
+```
+
+### The pre-commit hook keeps asking who is committing
+
+It only asks when the remote URL carries no `github-*` alias and the
+repository has no local `user.name`. Either re-clone through `gclone`,
+rewrite the remote to use the alias, or answer once and let it write the
+local config:
+
+```sh
+git remote set-url origin github-work:acme/api.git
+```
+
+### A repository's own hooks stopped running
+
+`core.hooksPath` redirects git to `~/.git-hooks` for **every**
+repository, so `.git/hooks/` is no longer consulted by git itself. The
+installed `pre-commit` chains to `.git/hooks/pre-commit` if it exists and
+is executable, so make sure yours is:
+
+```sh
+chmod +x .git/hooks/pre-commit
+```
+
+`pre-push` does not chain, and no other hook type is installed at all. A
+repository-local `pre-push`, `commit-msg`, or `post-merge` hook will not
+run while `core.hooksPath` is set.
+
+### The SSH connection test fails
+
+The test is not fatal and setup continues. Retry it by hand:
+
+```sh
+ssh -T git@github.com          # dev-setup
+ssh -T git@github-work         # git-multiple-accounts, per alias
+```
+
+A successful reply contains `successfully authenticated`. GitHub always
+closes the connection afterwards, which is normal and not an error.
+
+## 🤝 Contributing
+
+Both long scripts run under `set -euo pipefail`, and both are structured
+the same way: colour constants, helper functions, a pre-flight block,
+then numbered phases separated by `# === Phase N` headings.
+
+When changing them:
+
+- **Keep every phase skippable.** A `phase_prompt` in front of each one
+  is the contract, and it is why the script is safe to re-run.
+- **Never overwrite user data without asking.** Existing SSH keys are
+  reused, existing config blocks are detected with `grep` before being
+  appended, and a key regeneration prompt defaults to no.
+- **`sed -i` is not portable** between GNU and BSD. Use the `sed_inplace`
+  helper in `git-multiple-accounts.sh`.
+- **Bump both version strings together**, in `build-and-install.sh` and
+  in `version.txt`.
+- **Rebuild the tarball** with `bash build-and-install.sh` and commit the
+  result, since it is served directly.
+- **No em dash** in any script comment, commit message, or document.
+- Commit messages are one line, `<type>: <description>`, using the
+  conventional types.
+
+## 🏛️ Organisation
+
+ipile is a [Zunetra](../handbook) project. Org-level decisions, including
+naming and reserved names, live in that repository, not this one. The
+sibling projects are [culm](../culm), the workspace scaffolder and task
+runner, and [Klassivox](../Klassivox), the school management platform.
+
+## 📄 Licence
+
+MIT. See [LICENSE](LICENSE).

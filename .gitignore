@@ -438,3 +438,7 @@ docs/Screens/
 # the repository, so it has to be un-ignored explicitly.
 !bin/
 !bin/ipile
+
+# === Node and local tooling
+node_modules/
+.tools/

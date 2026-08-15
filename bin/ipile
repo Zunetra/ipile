@@ -124,6 +124,12 @@ cmd_run() {
   done
   export IPILE_ASSUME_YES IPILE_DRY_RUN
 
+  # Ahead of preflight, so its warnings about root, WSL or a missing
+  # network appear under the banner rather than above it. os_detect is
+  # pure detection and preflight calls it again, harmlessly.
+  os_detect || exit 1
+  ui_banner "ipile ${IPILE_VERSION}" "$IPILE_DISTRO"
+
   local targets=""
   if [ -n "$only" ]; then
     local id
@@ -322,6 +328,10 @@ case "$COMMAND" in
     ;;
 esac
 
+# Captured before anything else runs, because the update notice below has
+# its own exit status and would otherwise discard the command's.
+STATUS=$?
+
 # === Update notice
 #
 # Never fatal, and never printed for help, which exits above.
@@ -333,4 +343,18 @@ if [ "$COMMAND" != "version" ] && [ "$COMMAND" != "--version" ]; then
   fi
 fi
 
-exit 0
+# === Exit status
+#
+# A failed module does not abort the run: one broken step must not cost
+# the user the other nine, so the runner reports it and carries on. It
+# does have to reach the caller though, because 'ipile run --yes' is the
+# documented CI path and a pipeline that goes green on a failed install
+# is worse than no pipeline at all.
+#
+# A dry run is exempt. It changed nothing, so there is nothing to have
+# failed.
+if [ "${IPILE_DRY_RUN:-0}" != "1" ] && [ "${IPILE_HAD_FAILURE:-0}" -eq 1 ]; then
+  STATUS=1
+fi
+
+exit "$STATUS"

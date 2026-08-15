@@ -41,6 +41,15 @@ and skipped, not re-run.
 | `git-identity`, `git-accounts`, `git-hooks`, `git-globals`, `dotfiles` | `git-install` |
 | `pkgmanagers` | `node` |
 
+**A failed module does not abort the run, but it does reach the caller.**
+The runner reports the failure and continues, so one broken step cannot
+cost the user the other nine, and `bin/ipile` then exits `1` because
+`run --yes` is documented as the CI path. Two exceptions: a dry run
+always exits `0` since it changed nothing, and `doctor` always exits `0`
+because it reports rather than gates and must be readable under `set -e`.
+The status is captured immediately after the dispatch `case`, since the
+update notice that follows would otherwise discard it.
+
 `dotfiles` is in that list because it sets `core.excludesfile`, which is
 a git call like any other. Without the declaration, `ipile git accounts`
 on a machine with no git walked the user through generating a key and

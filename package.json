@@ -1,0 +1,44 @@
+{
+  "name": "ipile",
+  "version": "4.0.0",
+  "private": true,
+  "description": "Machine bootstrap and git completion. Toolchains, git identities, hooks and global config, one skippable step at a time.",
+  "keywords": [
+    "bootstrap",
+    "dotfiles",
+    "developer-setup",
+    "git",
+    "ssh",
+    "multiple-git-accounts",
+    "commit-signing",
+    "cli"
+  ],
+  "author": "Olorunshogo Moses BAMTEFA",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Zunetra/ipile.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Zunetra/ipile/issues"
+  },
+  "homepage": "https://github.com/Zunetra/ipile#readme",
+  "scripts": {
+    "start": "./bin/ipile",
+    "status": "./bin/ipile status",
+    "doctor": "./bin/ipile doctor",
+    "dry": "./bin/ipile run --dry-run",
+    "dry:yes": "./bin/ipile run --dry-run --yes",
+    "demo": "mkdir -p /tmp/ipile-demo && HOME=/tmp/ipile-demo ./bin/ipile",
+    "demo:accounts": "mkdir -p /tmp/ipile-demo && HOME=/tmp/ipile-demo ./bin/ipile git-accounts",
+    "demo:doctor": "HOME=/tmp/ipile-demo ./bin/ipile doctor",
+    "demo:tree": "find /tmp/ipile-demo -maxdepth 2 2>/dev/null || echo 'no sandbox yet, run: pnpm demo'",
+    "demo:clean": "rm -rf /tmp/ipile-demo",
+    "check": "bash -n bin/ipile lib/*.sh lib/core/*.sh lib/modules/*.sh",
+    "lint": "scripts/shellcheck.sh",
+    "lint:install": "scripts/shellcheck.sh --install",
+    "build": "bash build-and-install.sh",
+    "test": "pnpm run check && pnpm run lint"
+  },
+  "packageManager": "pnpm@11.21.0"
+}

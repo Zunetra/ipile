@@ -23,6 +23,12 @@
 # The canonical order. Dependencies run before dependents.
 IPILE_MODULES="system rust node pkgmanagers git-install git-identity git-accounts git-hooks git-globals dotfiles"
 
+# The user asked to stop. A distinct code rather than an exit, so core
+# never decides how the program ends: the runner propagates it and the
+# dispatcher still prints the summary, which is where the run log and the
+# backup directory are named.
+REGISTRY_QUIT=10
+
 registry_ids() {
   printf '%s\n' $IPILE_MODULES
 }
@@ -125,22 +131,26 @@ registry_run_one() {
     local choice=""
     echo ""
     if [ "$status" -eq 0 ]; then
-      ui_menu choice "Skip, this is already done" "Run it again anyway" "Show me what it does"
+      ui_menu choice "Skip, this is already done" "Run it again anyway" \
+        "Show me what it does" "!Quit, stop the whole run"
       case "$choice" in
         1) ui_skip "Skipped ${id}."; state_record_module "$id" "skipped"; return 0 ;;
         3) echo ""; describe; echo ""
            if ! ui_confirm "Run it?" "$default_run"; then
              ui_skip "Skipped ${id}."; state_record_module "$id" "skipped"; return 0
            fi ;;
+        4) return "$REGISTRY_QUIT" ;;
       esac
     else
-      ui_menu choice "Run it" "Skip it" "Show me what it does first"
+      ui_menu choice "Run it" "Skip it" "Show me what it does first" \
+        "!Quit, stop the whole run"
       case "$choice" in
         2) ui_skip "Skipped ${id}."; state_record_module "$id" "skipped"; return 0 ;;
         3) echo ""; describe; echo ""
            if ! ui_confirm "Run it?" "$default_run"; then
              ui_skip "Skipped ${id}."; state_record_module "$id" "skipped"; return 0
            fi ;;
+        4) return "$REGISTRY_QUIT" ;;
       esac
     fi
   fi
@@ -224,10 +234,17 @@ registry_run() {
   local id
   local ran=0
 
+  local rc
   for id in $IPILE_MODULES; do
     case "$requested" in
       *" $id "*)
-        registry_run_one "$id"
+        rc=0
+        registry_run_one "$id" || rc=$?
+        if [ "$rc" -eq "$REGISTRY_QUIT" ]; then
+          ui_skip "Stopped at ${id}. Nothing after it was run."
+          log_line "run stopped by the user at ${id}"
+          return "$REGISTRY_QUIT"
+        fi
         ran=$((ran + 1))
         ;;
     esac

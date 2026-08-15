@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+# Global pre-commit hook. Sets this repo's git identity the first time you
+# commit in it, then hands over to the repo's own pre-commit hook.
+#
+# Installed by ipile. Edit ~/.gitidentities to add or remove profiles.
+#
+# Why the chaining matters: core.hooksPath is global, so once it is set
+# git stops looking in .git/hooks entirely. Any hook this file does not
+# chain to is dead machine-wide, which is exactly how husky, lefthook and
+# commitlint break. So every exit path here goes through chain_local.
+
+IDENTITIES_FILE="$HOME/.gitidentities"
+
+# chain_local. Runs the repo's own pre-commit if it has one, passing every
+# argument and this hook's stdin through, and exits with its status.
+chain_local() {
+  local git_dir local_hook
+  # --git-dir, not --git-path hooks: the latter honours core.hooksPath and
+  # would resolve straight back to this file.
+  git_dir="$(git rev-parse --git-dir 2>/dev/null || echo .git)"
+  local_hook="${git_dir}/hooks/pre-commit"
+  if [ -x "$local_hook" ] && [ ! "$local_hook" -ef "$0" ]; then
+    exec "$local_hook" "$@"
+  fi
+  exit 0
+}
+
+set_identity() {
+  local alias_label name email key_pub
+  alias_label=$(echo "$1" | sed 's/github-//')
+  name="$2"
+  email="$3"
+  key_pub="$HOME/.ssh/id_ed25519_${alias_label}.pub"
+
+  git config --local user.name "$name"
+  git config --local user.email "$email"
+  if [ -f "$key_pub" ]; then
+    git config --local gpg.format ssh
+    git config --local user.signingkey "$key_pub"
+    git config --local commit.gpgsign true
+    git config --local tag.gpgsign true
+  fi
+  printf '\n  \033[38;2;1;102;48m✓\033[0m  Identity set: %s <%s> \033[2m(%s)\033[0m\n\n' "$name" "$email" "$1"
+}
+
+# Already have a local identity? Nothing to decide.
+LOCAL_NAME=$(git config --local user.name 2>/dev/null || true)
+[ -n "$LOCAL_NAME" ] && chain_local "$@"
+
+# Try to auto-detect from the remote alias, e.g. github-personal:user/repo.git
+REMOTE_URL=$(git remote get-url origin 2>/dev/null || true)
+DETECTED_ALIAS=""
+if [ -n "$REMOTE_URL" ]; then
+  DETECTED_ALIAS=$(echo "$REMOTE_URL" | sed -n 's/^\(github-[^:]*\):.*/\1/p')
+fi
+
+if [ -n "$DETECTED_ALIAS" ] && [ -f "$IDENTITIES_FILE" ]; then
+  IDENTITY=$(grep "^${DETECTED_ALIAS}|" "$IDENTITIES_FILE" 2>/dev/null | head -1 || true)
+  if [ -n "$IDENTITY" ]; then
+    D_NAME=$(echo "$IDENTITY" | cut -d'|' -f2)
+    D_EMAIL=$(echo "$IDENTITY" | cut -d'|' -f3)
+    set_identity "$DETECTED_ALIAS" "$D_NAME" "$D_EMAIL"
+    chain_local "$@"
+  fi
+fi
+
+# Fallback: ask, but only if there is anything to ask about.
+[ ! -f "$IDENTITIES_FILE" ] && chain_local "$@"
+
+LINES=()
+while IFS= read -r line; do
+  [ -n "$line" ] || continue
+  LINES+=("$line")
+done < "$IDENTITIES_FILE"
+
+[ "${#LINES[@]}" -eq 0 ] && chain_local "$@"
+
+printf '\n  No identity detected for this repo. Who is committing?\n\n'
+for idx in "${!LINES[@]}"; do
+  F_ALIAS=$(echo "${LINES[$idx]}" | cut -d'|' -f1)
+  F_NAME=$(echo "${LINES[$idx]}" | cut -d'|' -f2)
+  F_EMAIL=$(echo "${LINES[$idx]}" | cut -d'|' -f3)
+  printf '  [%d]  %s <%s>  \033[2m(%s)\033[0m\n' "$((idx+1))" "$F_NAME" "$F_EMAIL" "$F_ALIAS"
+done
+printf '\n'
+
+CHOICE=""
+while true; do
+  read -r -p "  Choose [1-${#LINES[@]}]: " CHOICE
+  if [[ "$CHOICE" =~ ^[0-9]+$ ]] && [ "$CHOICE" -ge 1 ] && [ "$CHOICE" -le "${#LINES[@]}" ]; then
+    break
+  fi
+  printf '  Please enter a number between 1 and %d.\n' "${#LINES[@]}"
+done
+
+SELECTED="${LINES[$((CHOICE-1))]}"
+SEL_ALIAS=$(echo "$SELECTED" | cut -d'|' -f1)
+SEL_NAME=$(echo "$SELECTED" | cut -d'|' -f2)
+SEL_EMAIL=$(echo "$SELECTED" | cut -d'|' -f3)
+
+set_identity "$SEL_ALIAS" "$SEL_NAME" "$SEL_EMAIL"
+chain_local "$@"

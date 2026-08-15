@@ -1,121 +1,111 @@
 #!/usr/bin/env bash
-# ================================================
-# build-and-install.sh
-# Builds the ipile tarball and writes it directly
-# to public/scripts/ipile.tar.gz for Vercel serving.
+# Builds ipile.tar.gz plus its SHA256SUMS.
 #
-# Run from the repo root:  bash public/scripts/build-and-install.sh
-# ================================================
+# Unlike the previous version this does not generate any shipped code
+# from heredocs. bin/ipile, lib/ and every asset are real files in the
+# repository, so what you read is what ships. The build only packs.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname "$0")" >/dev/null 2>&1 && pwd -P)"
-# public/scripts/ is two levels deep from the repo root
-REPO_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 OUT_DIR="$SCRIPT_DIR"
-TARBALL="$OUT_DIR/ipile.tar.gz"
-BASE_URL="https://shogo-portfolio-ebon.vercel.app/scripts"
-VERSION="v3.0"
+TARBALL="${OUT_DIR}/ipile.tar.gz"
+SUMS="${OUT_DIR}/SHA256SUMS"
 
-echo "Building ipile $VERSION..."
-echo "Output: $TARBALL"
+BASE_URL="${IPILE_BASE_URL:-https://shogo-portfolio-ebon.vercel.app/scripts}"
+VERSION="$(tr -d '[:space:]' < "${SCRIPT_DIR}/version.txt")"
+
+echo "Building ipile ${VERSION}"
+echo "  base url: ${BASE_URL}"
+echo "  output:   ${TARBALL}"
 echo ""
 
-# Temp build directory
-BUILD=$(mktemp -d)
+# === Sanity checks
+#
+# A tarball that ships a syntax error is worse than a failed build,
+# because it installs cleanly and then breaks on someone else's machine.
+
+fail=0
+for f in "${SCRIPT_DIR}/bin/ipile" "${SCRIPT_DIR}"/lib/*.sh \
+         "${SCRIPT_DIR}"/lib/core/*.sh "${SCRIPT_DIR}"/lib/modules/*.sh; do
+  [ -f "$f" ] || continue
+  if ! bash -n "$f" 2>/dev/null; then
+    echo "SYNTAX ERROR: ${f}"
+    bash -n "$f" || true
+    fail=1
+  fi
+done
+[ "$fail" -eq 0 ] || { echo ""; echo "Build aborted."; exit 1; }
+echo "All scripts parse."
+
+if command -v shellcheck >/dev/null 2>&1; then
+  # The exclusions are vetted, not blanket. SC1090/SC1091 are the dynamic
+  # sources the module registry is built on. SC2034 fires on MODULE_* and
+  # the colour constants, which are read across files it analyses one at a
+  # time. SC2088 fires on tildes inside user facing message strings, which
+  # are text and never expanded. SC2086 is the deliberate word splitting in
+  # the module id lists.
+  shellcheck -S warning -e SC1090,SC1091,SC2034,SC2086,SC2088,SC2016,SC2148 \
+    "${SCRIPT_DIR}/bin/ipile" \
+    "${SCRIPT_DIR}"/lib/*.sh \
+    "${SCRIPT_DIR}"/lib/core/*.sh \
+    "${SCRIPT_DIR}"/lib/modules/*.sh || echo "shellcheck reported issues (not fatal)"
+else
+  echo "shellcheck not installed, skipping lint."
+fi
+
+# === Assemble
+
+BUILD="$(mktemp -d)"
 trap 'rm -rf "$BUILD"' EXIT
 
-mkdir -p "$BUILD/bin" "$BUILD/lib"
+mkdir -p "${BUILD}/bin" "${BUILD}/lib"
 
-# === bin/ipile (dispatcher)
-cat > "$BUILD/bin/ipile" << 'CLI'
-#!/usr/bin/env bash
-set -euo pipefail
-SCRIPT_DIR="$(cd -- "$(dirname "$0")" >/dev/null 2>&1 && pwd -P)"
-INSTALL_DIR="$(dirname "$SCRIPT_DIR")"
-COMMAND="${1:-help}"
-case "$COMMAND" in
-  dev-setup) bash "$INSTALL_DIR/lib/setup.sh" ;;
-  git-multiple-accounts|git-accounts) bash "$INSTALL_DIR/lib/git-multiple-accounts.sh" ;;
-  doctor)    bash "$INSTALL_DIR/lib/doctor.sh" ;;
-  update)    bash "$INSTALL_DIR/lib/update.sh" ;;
-  version|--version) cat "$INSTALL_DIR/VERSION" 2>/dev/null || echo "unknown" ;;
-  help|*)
-    echo "ipile - machine bootstrap"
-    echo ""
-    echo "Commands:"
-    echo "  dev-setup              Full machine bootstrap (Rust, Node, Git, SSH, configs)"
-    echo "  git-multiple-accounts  Configure git identities and SSH keys, one account or many"
-    echo "  doctor                 Check installed tools"
-    echo "  update                 Update ipile itself"
-    echo "  version                Show current version"
-    exit 0
-    ;;
-esac
-LATEST="$(curl -fsSL BASE_URL_PLACEHOLDER/version.txt 2>/dev/null || echo "")"
-CURRENT="$(cat "$INSTALL_DIR/VERSION" 2>/dev/null || echo "unknown")"
-if [[ -n "$LATEST" && "$LATEST" != "$CURRENT" ]]; then
-  echo ""
-  echo "Update available: $LATEST  (run: ipile update)"
+cp "${SCRIPT_DIR}/bin/ipile" "${BUILD}/bin/ipile"
+cp -R "${SCRIPT_DIR}/lib/." "${BUILD}/lib/"
+printf '%s\n' "$VERSION" > "${BUILD}/VERSION"
+
+# The hosting URL is the one thing that cannot live in the source, since
+# it differs per deployment. It is substituted, never generated.
+for f in "${BUILD}/bin/ipile" "${BUILD}/lib/update.sh"; do
+  sed -i.bak "s|BASE_URL_PLACEHOLDER|${BASE_URL}|g" "$f"
+  rm -f "${f}.bak"
+done
+
+if grep -rq 'BASE_URL_PLACEHOLDER' "$BUILD" 2>/dev/null; then
+  echo "A BASE_URL_PLACEHOLDER survived substitution:"
+  grep -rl 'BASE_URL_PLACEHOLDER' "$BUILD"
+  exit 1
 fi
-CLI
-sed -i "s|BASE_URL_PLACEHOLDER|$BASE_URL|g" "$BUILD/bin/ipile"
 
-# === lib/setup.sh (copied from dev-setup.sh in the same directory)
-cp "$SCRIPT_DIR/dev-setup.sh" "$BUILD/lib/setup.sh"
-cp "$SCRIPT_DIR/git-multiple-accounts.sh" "$BUILD/lib/git-multiple-accounts.sh"
+chmod +x "${BUILD}/bin/ipile"
+find "${BUILD}/lib" -name '*.sh' -exec chmod +x {} \;
+[ -d "${BUILD}/lib/assets/hooks" ] && chmod +x "${BUILD}/lib/assets/hooks/"* 2>/dev/null || true
 
-# === lib/doctor.sh
-cat > "$BUILD/lib/doctor.sh" << 'DOC'
-#!/usr/bin/env bash
-set -euo pipefail
-echo "Running diagnostics..."
-echo ""
-pass() { echo "  [ok] $1"; }
-fail() { echo "  [!!] $1 - not found"; }
-command -v git     >/dev/null && pass "git $(git --version | awk '{print $3}')"     || fail "git"
-command -v node    >/dev/null && pass "node $(node -v)"   || fail "node"
-command -v pnpm    >/dev/null && pass "pnpm $(pnpm -v)"   || fail "pnpm"
-command -v rustc   >/dev/null && pass "rust $(rustc -V | awk '{print $2}')" || fail "rust"
-command -v ssh     >/dev/null && pass "ssh" || fail "ssh"
-echo ""
-echo "Run 'ipile dev-setup' to install anything missing."
-DOC
+# === Pack
 
-# === lib/update.sh
-cat > "$BUILD/lib/update.sh" << UPDEOF
-#!/usr/bin/env bash
-set -euo pipefail
-INSTALL_DIR="\$HOME/.ipile"
-CURRENT="\$(cat "\$INSTALL_DIR/VERSION" 2>/dev/null || echo "unknown")"
-LATEST="\$(curl -fsSL $BASE_URL/version.txt 2>/dev/null || echo "unknown")"
-echo "Current: \$CURRENT"
-echo "Latest:  \$LATEST"
-if [[ "\$CURRENT" == "\$LATEST" ]]; then
-  echo "Already up to date."
-  exit 0
-fi
-echo "Updating ipile..."
-curl -fsSL $BASE_URL/ipile.tar.gz -o /tmp/ipile.tar.gz
-tar -xzf /tmp/ipile.tar.gz -C "\$INSTALL_DIR" --overwrite
-echo "\$LATEST" > "\$INSTALL_DIR/VERSION"
-echo "Updated to \$LATEST. Restart your terminal."
-UPDEOF
-
-# === VERSION
-echo "$VERSION" > "$BUILD/VERSION"
-
-# Make scripts executable
-chmod +x "$BUILD/bin/ipile" "$BUILD/lib/"*.sh
-
-# Pack
 tar -czf "$TARBALL" -C "$BUILD" .
 
-echo "Done. Tarball written to: $TARBALL"
+# === Checksums
+#
+# update.sh refuses to install an unverified download, so publishing this
+# file alongside the tarball is not optional.
+
+cd "$OUT_DIR"
+if command -v sha256sum >/dev/null 2>&1; then
+  sha256sum ipile.tar.gz installer.sh version.txt > "$SUMS"
+else
+  shasum -a 256 ipile.tar.gz installer.sh version.txt > "$SUMS"
+fi
+
 echo ""
-echo "Files served at:"
-echo "  $BASE_URL/installer.sh"
-echo "  $BASE_URL/dev-setup.sh"
-echo "  $BASE_URL/ipile.tar.gz"
-echo "  $BASE_URL/version.txt"
+echo "Built:"
+echo "  ${TARBALL}  ($(wc -c < "$TARBALL" | tr -d ' ') bytes)"
+echo "  ${SUMS}"
 echo ""
-echo "Deploy via: git push  (Vercel picks up public/scripts/ automatically)"
+echo "Publish these four at ${BASE_URL}/ :"
+echo "  installer.sh"
+echo "  ipile.tar.gz"
+echo "  version.txt"
+echo "  SHA256SUMS"
+echo ""
+echo "version.txt and the packed VERSION both read ${VERSION}, so they cannot drift."

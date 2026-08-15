@@ -1,0 +1,51 @@
+{
+  "recommendations": [
+    // === Core formatting and linting
+    "esbenp.prettier-vscode",
+    "dbaeumer.vscode-eslint",
+
+    // === TypeScript and React
+    "ms-vscode.vscode-typescript-next",
+    "dsznajder.es7-react-js-snippets",
+    "christian-kohler.path-intellisense",
+
+    // === Vue / Nuxt
+    "Vue.volar",
+    "antfu.unocss",
+
+    // === Tailwind CSS
+    "bradlc.vscode-tailwindcss",
+
+    // === Next.js
+    "nextjs.vscode-nextjs",
+
+    // === Solidity / Web3
+    "NomicFoundation.hardhat-solidity",
+    "tintinweb.solidity-visual-auditor",
+
+    // === Rust
+    "rust-lang.rust-analyzer",
+    "tamasfe.even-better-toml",
+
+    // === Cairo / Starknet
+    "starkware.cairo1",
+
+    // === Git
+    "eamodio.gitlens",
+    "mhutchie.git-graph",
+
+    // === DX utilities
+    "streetsidesoftware.code-spell-checker",
+    "usernamehw.errorlens",
+    "antfu.iconify",
+    "mikestead.dotenv",
+    "naumovs.color-highlight",
+
+    // === Editor polish
+    "pkief.material-icon-theme"
+  ],
+  "unwantedRecommendations": [
+    "hookyqr.beautify",
+    "ms-vscode.vscode-typescript-tslint-plugin"
+  ]
+}

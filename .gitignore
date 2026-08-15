@@ -431,3 +431,10 @@ FodyWeavers.xsd
 
 # === Ignored File Paths
 docs/Screens/
+
+# === ipile source that a generic gitignore would eat
+# The global gitignore excludes bin/ as a build-output directory. Here
+# bin/ipile is the dispatcher, the single most important source file in
+# the repository, so it has to be un-ignored explicitly.
+!bin/
+!bin/ipile

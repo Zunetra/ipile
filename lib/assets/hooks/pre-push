@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Global pre-push hook. Prints which identity is pushing, then hands over
+# to the repo's own pre-push hook.
+#
+# Installed by ipile.
+#
+# core.hooksPath is global, so once it is set git stops looking in
+# .git/hooks entirely. Anything this file does not chain to is dead
+# machine-wide. Note that pre-push reads its ref list on stdin, so this
+# hook must not consume stdin before handing over: exec passes the still
+# unread stream straight to the repo's hook.
+
+REMOTE="$1"
+P_NAME=$(git config user.name 2>/dev/null || echo "unknown")
+P_EMAIL=$(git config user.email 2>/dev/null || echo "unknown")
+printf '\n  \033[38;2;1;102;48m→\033[0m  Pushing to \033[1m%s\033[0m as: %s <%s>\n\n' "$REMOTE" "$P_NAME" "$P_EMAIL"
+
+# --git-dir, not --git-path hooks: the latter honours core.hooksPath and
+# would resolve straight back to this file.
+GIT_DIR_PATH="$(git rev-parse --git-dir 2>/dev/null || echo .git)"
+LOCAL_HOOK="${GIT_DIR_PATH}/hooks/pre-push"
+if [ -x "$LOCAL_HOOK" ] && [ ! "$LOCAL_HOOK" -ef "$0" ]; then
+  exec "$LOCAL_HOOK" "$@"
+fi
+exit 0

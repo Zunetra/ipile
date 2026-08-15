@@ -1,0 +1,336 @@
+#!/usr/bin/env bash
+# ipile. Machine bootstrap and git completion.
+#
+# Three ways in, all going through the same modules:
+#
+#   ipile                              menu, pick what you want
+#   ipile git accounts                 jump straight to one module
+#   ipile run --only git-accounts --yes    non interactive, for CI
+#
+set -uo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname "$0")" >/dev/null 2>&1 && pwd -P)"
+IPILE_HOME="$(dirname "$SCRIPT_DIR")"
+IPILE_LIB="${IPILE_HOME}/lib"
+IPILE_VAR="${IPILE_VAR:-${IPILE_HOME}/var}"
+IPILE_VERSION="$(cat "${IPILE_HOME}/VERSION" 2>/dev/null || printf 'dev')"
+IPILE_RUN_ID="$(date -u '+%Y%m%d-%H%M%S')"
+IPILE_HAD_FAILURE=0
+
+export IPILE_HOME IPILE_LIB IPILE_VAR IPILE_VERSION IPILE_RUN_ID
+
+# shellcheck source=/dev/null
+. "${IPILE_LIB}/core/ui.sh"
+# shellcheck source=/dev/null
+. "${IPILE_LIB}/core/fs.sh"
+# shellcheck source=/dev/null
+. "${IPILE_LIB}/core/os.sh"
+# shellcheck source=/dev/null
+. "${IPILE_LIB}/core/state.sh"
+# shellcheck source=/dev/null
+. "${IPILE_LIB}/core/identity.sh"
+# shellcheck source=/dev/null
+. "${IPILE_LIB}/core/registry.sh"
+
+IPILE_DRY_RUN=0
+IPILE_ASSUME_YES=0
+IPILE_ONLY_MODE=0
+export IPILE_DRY_RUN IPILE_ASSUME_YES IPILE_ONLY_MODE
+
+# === Help
+
+usage() {
+  cat <<'TXT'
+ipile - machine bootstrap and git completion
+
+USAGE
+  ipile                          Interactive menu
+  ipile run [options]            Run modules
+  ipile <module>                 Run one module
+  ipile status                   What is set up on this machine
+  ipile doctor                   Verify everything, change nothing
+  ipile restore [run-id]         List or restore a backup
+  ipile update                   Update ipile itself
+  ipile version                  Print the version
+
+MODULES
+  system         System packages and build tools
+  rust           Rust via rustup, with rustfmt and clippy
+  node           Node.js via nvm
+  pkgmanagers    Corepack, pnpm, yarn
+  git-install    Git itself
+  git-identity   One identity: name, email, SSH key, signing
+  git-accounts   Several identities, one per remote
+  git-hooks      Global hooks, gclone and gitprofile
+  git-globals    Git config and aliases
+  dotfiles       Global editor and formatter configs
+
+RUN OPTIONS
+  --only a,b,c   Run only these modules
+  --skip a,b,c   Run everything except these
+  --yes          Take every default, never prompt. For CI
+  --dry-run      Print what would change, change nothing
+
+EXAMPLES
+  ipile git-accounts                 Add more git accounts, nothing else
+  ipile run --skip dotfiles          Everything but the config files
+  ipile run --only rust,node --yes   Non interactive toolchain install
+  ipile run --dry-run                See the whole plan first
+TXT
+}
+
+# === Pre-flight
+
+preflight() {
+  os_detect || exit 1
+
+  if [ "$(id -u)" -eq 0 ]; then
+    ui_warn "Running as root is not recommended. Files land in root's home, not yours."
+    ui_confirm "Continue anyway?" "n" || exit 1
+  fi
+
+  # bash 4 is no longer required, but a very old bash is still worth
+  # naming so a syntax error later is not a mystery.
+  case "${BASH_VERSION:-0}" in
+    [12].*) ui_warn "bash ${BASH_VERSION} is very old. ipile targets 3.2 and newer." ;;
+  esac
+
+  os_is_wsl && ui_info "WSL detected. The ssh-agent will not persist across terminal restarts."
+
+  if ! curl -s --head --connect-timeout 5 https://github.com >/dev/null 2>&1; then
+    ui_warn "No internet connection detected. Anything that downloads will fail."
+  fi
+
+  state_init
+  log_init
+}
+
+# === Commands
+
+cmd_run() {
+  local only=""
+  local skip=""
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --only) only="$(printf '%s' "$2" | tr ',' ' ')"; shift 2 ;;
+      --only=*) only="$(printf '%s' "${1#*=}" | tr ',' ' ')"; shift ;;
+      --skip) skip="$(printf '%s' "$2" | tr ',' ' ')"; shift 2 ;;
+      --skip=*) skip="$(printf '%s' "${1#*=}" | tr ',' ' ')"; shift ;;
+      --yes|-y) IPILE_ASSUME_YES=1; shift ;;
+      --dry-run) IPILE_DRY_RUN=1; shift ;;
+      *) ui_err "Unknown option: $1"; return 1 ;;
+    esac
+  done
+  export IPILE_ASSUME_YES IPILE_DRY_RUN
+
+  local targets=""
+  if [ -n "$only" ]; then
+    local id
+    for id in $only; do
+      registry_exists "$id" || { ui_err "Unknown module: ${id}"; return 1; }
+    done
+    # A module that cannot work without another one pulls it in, so
+    # 'ipile git accounts' on a machine with no git installs git first
+    # instead of failing halfway through.
+    targets="$(registry_expand $only | tr '\n' ' ')"
+
+    local added=""
+    for id in $targets; do
+      case " $only " in
+        *" $id "*) ;;
+        *) added="${added}${id} " ;;
+      esac
+    done
+    [ -n "$added" ] && ui_info "Also running, because the modules you asked for need them: ${added}"
+
+    # An explicit --only is already a choice. Asking again about each one
+    # would just be a second confirmation of the same decision. Anything
+    # pulled in as a dependency is still offered, since the user did not
+    # ask for it by name.
+    IPILE_ONLY_MODE=1
+    IPILE_ONLY_EXPLICIT=" $only "
+    export IPILE_ONLY_MODE IPILE_ONLY_EXPLICIT
+  else
+    local id skipped
+    for id in $IPILE_MODULES; do
+      skipped=0
+      case " $skip " in *" $id "*) skipped=1 ;; esac
+      [ "$skipped" -eq 0 ] && targets="$targets $id"
+    done
+  fi
+
+  preflight
+
+  [ "$IPILE_DRY_RUN" = "1" ] && {
+    echo ""
+    ui_warn "Dry run. Nothing on this machine will change."
+  }
+
+  registry_run $targets
+  summary
+}
+
+cmd_menu() {
+  clear 2>/dev/null || true
+  ui_banner "ipile ${IPILE_VERSION}" "Machine bootstrap and git completion"
+  preflight
+  registry_overview
+
+  local choice
+  echo -e "  ${BOLD}What would you like to do?${NC}"
+  echo ""
+  ui_menu choice \
+    "Run everything, asking about each step" \
+    "Set up git accounts only" \
+    "Install toolchains only (rust, node, package managers)" \
+    "Write the global config files only" \
+    "Nothing, quit"
+
+  case "$choice" in
+    1) registry_run $IPILE_MODULES; summary ;;
+    2) registry_run git-install git-identity git-accounts git-hooks git-globals; summary ;;
+    3) registry_run system rust node pkgmanagers; summary ;;
+    4) registry_run dotfiles; summary ;;
+    5) ui_info "Nothing changed."; exit 0 ;;
+  esac
+}
+
+cmd_status() {
+  os_detect || exit 1
+  ui_banner "ipile ${IPILE_VERSION}" "$IPILE_DISTRO"
+  registry_overview
+  echo -e "  ${DIM}Run 'ipile doctor' to verify, or 'ipile' to change anything.${NC}"
+  echo ""
+}
+
+cmd_restore() {
+  local run_id="${1:-}"
+  local backups="${IPILE_VAR}/backups"
+
+  if [ ! -d "$backups" ]; then
+    ui_info "No backups yet. ipile creates one per run, the first time a run changes a file."
+    return 0
+  fi
+
+  if [ -z "$run_id" ]; then
+    echo ""
+    echo -e "  ${BOLD}Backups${NC}"
+    echo ""
+    local d
+    for d in "$backups"/*; do
+      [ -d "$d" ] || continue
+      printf "  %-20s %s file(s)\n" "$(basename "$d")" \
+        "$(wc -l < "${d}/MANIFEST" 2>/dev/null | tr -d ' ' || printf '0')"
+    done
+    echo ""
+    echo -e "  ${DIM}Restore one with: ipile restore <run-id>${NC}"
+    echo ""
+    return 0
+  fi
+
+  local dir="${backups}/${run_id}"
+  [ -d "$dir" ] || { ui_err "No backup called ${run_id}"; return 1; }
+
+  echo ""
+  ui_warn "This overwrites the current files with the versions from ${run_id}:"
+  echo ""
+  cat "${dir}/MANIFEST" 2>/dev/null | sed 's/^/    /'
+  echo ""
+  ui_confirm "Restore them?" "n" || { ui_info "Nothing restored."; return 0; }
+
+  local target flat
+  while IFS= read -r target; do
+    [ -n "$target" ] || continue
+    flat="$(printf '%s' "${target#$HOME/}" | tr '/' '_')"
+    if [ -f "${dir}/${flat}" ]; then
+      cp -p "${dir}/${flat}" "$target"
+      ui_ok "Restored ${target}"
+    fi
+  done < "${dir}/MANIFEST"
+}
+
+summary() {
+  echo ""
+  ui_rule
+  if [ "${IPILE_DRY_RUN:-0}" = "1" ]; then
+    echo -e "  ${BOLD}Dry run finished. Nothing was changed.${NC}"
+  elif [ "$IPILE_HAD_FAILURE" -eq 1 ]; then
+    echo -e "  ${BOLD}Finished, with failures.${NC}"
+    echo -e "  ${DIM}Run 'ipile doctor' for the detail.${NC}"
+  else
+    echo -e "  ${BOLD}${GREEN}Finished.${NC}"
+  fi
+  ui_rule
+  echo ""
+  [ -n "${IPILE_LOG:-}" ] && ui_info "Run log: ${IPILE_LOG}"
+  [ -d "$(fs_backup_dir)" ] && ui_info "Backups: $(fs_backup_dir)"
+  echo ""
+  echo -e "  ${DIM}Restart your terminal so the new PATH and shell helpers load.${NC}"
+  echo ""
+}
+
+# === Dispatch
+
+COMMAND="${1:-menu}"
+[ $# -gt 0 ] && shift
+
+case "$COMMAND" in
+  menu)             cmd_menu ;;
+  run)              cmd_run "$@" ;;
+  status)           cmd_status ;;
+  doctor)           bash "${IPILE_LIB}/doctor.sh" ;;
+  restore)          cmd_restore "$@" ;;
+  update)           bash "${IPILE_LIB}/update.sh" ;;
+  version|--version|-v) printf '%s\n' "$IPILE_VERSION" ;;
+  help|--help|-h)   usage; exit 0 ;;
+
+  # Backwards compatible names from before the refactor.
+  dev-setup)
+    ui_info "'dev-setup' is now 'ipile run'. Running that."
+    cmd_run "$@"
+    ;;
+  git-multiple-accounts)
+    ui_info "'git-multiple-accounts' is now 'ipile git-accounts'. Running that."
+    cmd_run --only git-install,git-identity,git-accounts,git-hooks,git-globals "$@"
+    ;;
+
+  git)
+    # ipile git accounts / ipile git identity / ipile git hooks.
+    # The subcommand is shifted off so anything after it, such as
+    # --dry-run, still reaches cmd_run instead of being dropped.
+    SUB="${1:-}"
+    [ $# -gt 0 ] && shift
+    case "$SUB" in
+      accounts|multiple-accounts) cmd_run --only git-accounts "$@" ;;
+      identity)                   cmd_run --only git-identity "$@" ;;
+      hooks)                      cmd_run --only git-hooks "$@" ;;
+      globals|config)             cmd_run --only git-globals "$@" ;;
+      *) ui_err "Unknown: ipile git ${SUB}"; usage; exit 1 ;;
+    esac
+    ;;
+
+  *)
+    if registry_exists "$COMMAND"; then
+      cmd_run --only "$COMMAND" "$@"
+    else
+      ui_err "Unknown command: ${COMMAND}"
+      echo ""
+      usage
+      exit 1
+    fi
+    ;;
+esac
+
+# === Update notice
+#
+# Never fatal, and never printed for help, which exits above.
+if [ "$COMMAND" != "version" ] && [ "$COMMAND" != "--version" ]; then
+  LATEST="$(curl -fsSL BASE_URL_PLACEHOLDER/version.txt 2>/dev/null || printf '')"
+  if [ -n "$LATEST" ] && [ "$LATEST" != "$IPILE_VERSION" ]; then
+    echo ""
+    echo "Update available: ${LATEST}  (run: ipile update)"
+  fi
+fi
+
+exit 0

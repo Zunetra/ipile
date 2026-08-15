@@ -72,11 +72,16 @@ fi
 
 cd "$ROOT"
 echo "Linting with $SHELLCHECK"
+# The assets are shipped code, not data: the hooks and the shell helpers
+# run on every commit and in every shell, so they are linted too.
 "$SHELLCHECK" -S warning -e "$EXCLUDE" \
   bin/ipile \
   lib/core/*.sh \
   lib/modules/*.sh \
   lib/doctor.sh \
-  lib/update.sh
+  lib/update.sh \
+  lib/assets/hooks/pre-commit \
+  lib/assets/hooks/pre-push \
+  lib/assets/shell/*.sh
 
 echo "shellcheck: 0 findings"

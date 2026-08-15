@@ -89,14 +89,40 @@ Two things follow from that:
   self hosted instances
 - Drift detection across all four sources a profile lives in, with repair
 
+### Several accounts in one repository
+
+- `gremote add <name> <url>`, so `origin` can push as work and `fork` can
+  push as personal, from the same checkout
+- `gremote list`, showing every remote, the identity behind it, and who
+  the repository actually commits as
+- `pre-push` warns when the commits going out were authored by a
+  different identity than the remote you are pushing to
+- `gitprofile use <alias>`, one command to correct a repository whose
+  identity was guessed wrong
+
 ### Everyday helpers
 
 - `gclone`, which clones through the right identity and bakes the alias
   into that repository
 - `gitprofile`, to list profiles and override one for a single shell
 - `git whoami`, plus ten more aliases
-- Eight global hook types, each chaining to the repository's own hook so
-  husky, lefthook and commitlint keep working
+- Sixteen global hook types, each chaining to the repository's own hook
+  so husky, lefthook and commitlint keep working, `post-rewrite` and
+  `pre-merge-commit` included
+
+### Sensible git defaults
+
+- 30 global settings written with `git config --global`, nothing hidden
+  in a file ipile owns
+- Histogram diffs, `zdiff3` conflict markers, rerere with autoupdate,
+  autostash on both rebase and merge
+- `transfer.fsckObjects` and `fetch.fsckObjects`, so malformed or
+  malicious objects are rejected rather than fetched
+- A mistyped command is **suggested, never run for you**
+- **Version gated**: anything your git is too old for falls back or is
+  skipped, so an old distro gets a working config rather than one that
+  fails mid-merge
+- Entirely optional. Skip the module and your git behaviour is untouched
 
 ### Safety
 
@@ -312,8 +338,8 @@ Ten, run in this order. Dependencies come before dependents.
 | `git-install` | Git itself |
 | `git-identity` | One identity: name, email, SSH key, signing |
 | `git-accounts` | Several identities, one per remote |
-| `git-hooks` | Global hooks, plus `gclone` and `gitprofile` |
-| `git-globals` | Git config and 11 aliases |
+| `git-hooks` | Global hooks, plus `gclone`, `gremote` and `gitprofile` |
+| `git-globals` | 30 git settings and 11 aliases, version gated |
 | `dotfiles` | VS Code, Prettier, solhint, lint-staged, gitignore |
 
 Every module implements the same four functions, which is what makes the
@@ -412,15 +438,74 @@ Each profile has a host field, defaulting to `github.com`. GitLab,
 Bitbucket, Gitea and self hosted instances work. The alias prefix follows
 the host, so `github-work` and `gitlab-work` can coexist.
 
+### Several accounts in one repository
+
+This is the part other tools do not do. A repository can push to more
+than one account, because the account is chosen by the SSH host alias
+baked into each remote's URL. `gremote` does that rewriting for you.
+
+```sh
+gclone https://github.com/acme/api          # origin, cloned as work
+gremote add fork https://github.com/me/api  # a second remote, as personal
+gremote list                                # who pushes what
+```
+
+```
+  Remotes
+
+  origin       github-work:acme/api.git
+               Work User <work@example.com>
+
+  fork         github-personal:me/api.git
+               Personal User <personal@example.com>
+
+  Committing as: Work User <work@example.com>
+```
+
+Each remote authenticates with its own key. Pushing to `origin` uses the
+work key, pushing to `fork` uses the personal one, and neither asks you
+anything.
+
+**One thing to understand, because it surprises everyone.** Git stamps
+the author into a commit when the commit is made, not when it is pushed,
+and a repository has one identity at a time. So several remotes decide
+**which key authenticates each push**, not **who authored the commits**.
+The last line of `gremote list` is there to say which identity is
+actually doing the committing.
+
+That is also why `pre-push` warns rather than fixes:
+
+```
+  →  Pushing to fork as: Work User <work@example.com>
+
+  !  These commits were not authored by fork's identity.
+     Expected: personal@example.com
+     Found:    work@example.com
+     The author is set when a commit is made, so this is not fixed by
+     pushing elsewhere. To change it: gitprofile use <alias>, then rebase.
+```
+
+It fires at the last moment a rebase is still cheap, which is before the
+commits leave your machine. It does not block the push, because whether
+the author is wrong is your call and not the tool's.
+
 ### Everyday use
 
 ```sh
 gclone https://github.com/acme/api   # clone as a chosen identity
+gremote add fork <url>               # add a remote on another account
+gremote list                         # remotes, identities, and the committer
 git whoami                           # who does this repo commit as
 gitprofile                           # list profiles, active one marked
 gitprofile work                      # override for this shell only
+gitprofile use github-work           # set THIS repo's identity, permanently
 $EDITOR ~/.gitidentities             # edit by hand at any time
 ```
+
+`gitprofile work` and `gitprofile use work` are different on purpose. The
+first exports into the current shell, lasting until you close it and
+reaching every repository you touch from it. The second writes to this
+repository's config, surviving new shells and affecting nothing else.
 
 ## 🛡️ Safety
 
@@ -440,12 +525,32 @@ entirely. v3 installed a `pre-commit` that chained to the repo's own hook
 but a `pre-push` that did not, and installed no other hook types at all,
 which silently disabled husky, lefthook and commitlint machine wide.
 
-v4 installs **eight** hook types (`pre-commit`, `pre-push`, `commit-msg`,
-`prepare-commit-msg`, `post-commit`, `post-merge`, `post-checkout`,
-`pre-rebase`), and every one of them hands over to the repository's own
-hook of the same name with `exec`, passing arguments and stdin through
-and propagating the exit code. `ipile doctor` checks that the chaining is
+v4 installs **sixteen** hook types, every client-side hook a developer
+machine can fire except two, and each one hands over to the repository's
+own hook of the same name, passing arguments and stdin through and
+propagating the exit code. `ipile doctor` checks that the chaining is
 intact.
+
+```
+pre-commit          prepare-commit-msg   commit-msg        post-commit
+pre-push            pre-rebase           post-rewrite      pre-merge-commit
+post-merge          post-checkout        pre-auto-gc       push-to-checkout
+applypatch-msg      pre-applypatch       post-applypatch   sendemail-validate
+```
+
+`post-rewrite` and `pre-merge-commit` matter more than they look: husky
+and lefthook both use them, so a machine missing them runs your amend and
+merge hooks nowhere.
+
+**Two are left out on purpose, and the reason was measured.**
+`reference-transaction` fired **202 times during one fetch of 100 refs**,
+and twice per commit; `post-index-change` fires on every index write.
+Chaining either would add roughly 750ms to a fetch that otherwise takes
+37ms, permanently, for a hook almost nobody defines. If you need one,
+unset `core.hooksPath` in that repository. The server-side hooks
+(`pre-receive`, `update`, `post-receive`, `post-update`, `proc-receive`)
+never run on a developer's machine, and `fsmonitor-watchman` is selected
+by `core.fsmonitor` rather than found in the hooks directory.
 
 ## 🏗️ Architecture
 

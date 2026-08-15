@@ -1,25 +1,90 @@
 #!/usr/bin/env bash
-# Global pre-push hook. Prints which identity is pushing, then hands over
-# to the repo's own pre-push hook.
+# Global pre-push hook. Prints which identity is pushing, warns when the
+# commits going out were authored by somebody else, then hands over to the
+# repo's own pre-push hook.
 #
 # Installed by ipile.
 #
 # core.hooksPath is global, so once it is set git stops looking in
 # .git/hooks entirely. Anything this file does not chain to is dead
-# machine-wide. Note that pre-push reads its ref list on stdin, so this
-# hook must not consume stdin before handing over: exec passes the still
-# unread stream straight to the repo's hook.
+# machine-wide.
+#
+# pre-push receives its ref list on stdin. This hook has to read that list
+# to see which commits are going out, so it cannot exec and let the repo's
+# hook inherit an unread stream. It saves the list and replays it instead.
 
 REMOTE="$1"
+REFS="$(cat)"
+
 P_NAME=$(git config user.name 2>/dev/null || echo "unknown")
 P_EMAIL=$(git config user.email 2>/dev/null || echo "unknown")
-printf '\n  \033[38;2;1;102;48m→\033[0m  Pushing to \033[1m%s\033[0m as: %s <%s>\n\n' "$REMOTE" "$P_NAME" "$P_EMAIL"
+printf '\n  \033[38;2;1;102;48m→\033[0m  Pushing to \033[1m%s\033[0m as: %s <%s>\n' "$REMOTE" "$P_NAME" "$P_EMAIL"
 
+# === Author check
+#
+# Git stamps the author when a commit is made, not when it is pushed, so
+# this cannot fix anything. It can tell you before the commits leave the
+# machine, which is the last moment a rebase is still cheap.
+
+EXPECTED_EMAIL=""
+IDENTITIES_FILE="$HOME/.gitidentities"
+R_ALIAS=$(git config --local --get "remote.${REMOTE}.ipileidentity" 2>/dev/null || true)
+if [ -z "$R_ALIAS" ]; then
+  # Not added by gremote. The alias is still in the URL, which is where it
+  # actually takes effect.
+  R_URL=$(git remote get-url "$REMOTE" 2>/dev/null || true)
+  R_ALIAS=$(printf '%s' "$R_URL" | sed -n 's/^\(git@\)\{0,1\}\([a-z0-9]*-[^:]*\):.*/\2/p')
+fi
+if [ -n "$R_ALIAS" ] && [ -f "$IDENTITIES_FILE" ]; then
+  EXPECTED_EMAIL=$(grep "^${R_ALIAS}|" "$IDENTITIES_FILE" 2>/dev/null | head -1 | cut -d'|' -f3)
+fi
+
+if [ -n "$EXPECTED_EMAIL" ]; then
+  ZERO="0000000000000000000000000000000000000000"
+  MISMATCHED=""
+  while read -r _localref localsha _remoteref remotesha; do
+    [ -n "$localsha" ] || continue
+    # A deletion pushes no commits.
+    [ "$localsha" = "$ZERO" ] && continue
+    if [ "$remotesha" = "$ZERO" ]; then
+      # A new branch. Bound it by what the remote already has, so the
+      # whole history of an old repo is not walked on first push.
+      RANGE="$localsha --not --remotes=${REMOTE}"
+    else
+      RANGE="${remotesha}..${localsha}"
+    fi
+    # shellcheck disable=SC2086
+    # RANGE is a built argument list, not one word, and must split.
+    FOUND=$(git log --format='%ae' $RANGE 2>/dev/null | sort -u | grep -v "^${EXPECTED_EMAIL}$" || true)
+    [ -n "$FOUND" ] && MISMATCHED="${MISMATCHED}${FOUND}
+"
+  done <<EOF
+$REFS
+EOF
+
+  MISMATCHED=$(printf '%s' "$MISMATCHED" | sort -u | grep -v '^$' || true)
+  if [ -n "$MISMATCHED" ]; then
+    printf '\n  \033[1;33m!\033[0m  These commits were not authored by %s'"'"'s identity.\n' "$REMOTE"
+    printf '     Expected: %s\n' "$EXPECTED_EMAIL"
+    printf '%s\n' "$MISMATCHED" | while IFS= read -r m; do
+      [ -n "$m" ] && printf '     Found:    %s\n' "$m"
+    done
+    printf '     \033[2mThe author is set when a commit is made, so this is not fixed by\033[0m\n'
+    printf '     \033[2mpushing elsewhere. To change it: gitprofile use <alias>, then rebase.\033[0m\n'
+  fi
+fi
+
+printf '\n'
+
+# === Chain
+#
 # --git-dir, not --git-path hooks: the latter honours core.hooksPath and
 # would resolve straight back to this file.
 GIT_DIR_PATH="$(git rev-parse --git-dir 2>/dev/null || echo .git)"
 LOCAL_HOOK="${GIT_DIR_PATH}/hooks/pre-push"
 if [ -x "$LOCAL_HOOK" ] && [ ! "$LOCAL_HOOK" -ef "$0" ]; then
-  exec "$LOCAL_HOOK" "$@"
+  # Replayed rather than exec'd, because the stream was already consumed.
+  printf '%s\n' "$REFS" | "$LOCAL_HOOK" "$@"
+  exit $?
 fi
 exit 0

@@ -316,3 +316,9 @@ gradle-app.setting
 # === Lighthouse CI
 .lighthouseci/
 
+# === Unwanted Docs
+docs/Screens/
+docs/Unwanted/
+
+
+

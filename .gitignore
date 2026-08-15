@@ -442,3 +442,7 @@ docs/Screens/
 # === Node and local tooling
 node_modules/
 .tools/
+pnpm-lock.yaml
+
+# Run state, logs and backups from a checkout-local run
+var/

@@ -75,6 +75,23 @@ done < "$IDENTITIES_FILE"
 
 [ "${#LINES[@]}" -eq 0 ] && chain_local "$@"
 
+# Git runs hooks with stdin closed, so asking anything means reattaching
+# to the controlling terminal. An IDE, a GUI client, a script, a rebase or
+# a CI job has none. Reading from a closed stdin returns EOF immediately,
+# and the validation loop below used to spin on that forever, hanging the
+# commit with no way out but Ctrl-C. Fall through to the global identity
+# instead, and say so once rather than silently.
+# Opened in a test first, because /dev/tty can exist as a device and
+# still refuse to open when there is no controlling terminal, and a
+# failed exec redirect prints its own error before we can suppress it.
+if ! { : </dev/tty; } 2>/dev/null; then
+  printf '\n  \033[1;33m!\033[0m  No identity detected here, and no terminal to ask.\n'
+  printf '     Committing with your global identity.\n'
+  printf '     Set this repo'"'"'s identity with: \033[1mgitprofile use <alias>\033[0m\n\n'
+  chain_local "$@"
+fi
+exec </dev/tty
+
 printf '\n  No identity detected for this repo. Who is committing?\n\n'
 for idx in "${!LINES[@]}"; do
   F_ALIAS=$(echo "${LINES[$idx]}" | cut -d'|' -f1)
@@ -86,7 +103,12 @@ printf '\n'
 
 CHOICE=""
 while true; do
-  read -r -p "  Choose [1-${#LINES[@]}]: " CHOICE
+  # A failed read is EOF, not a typo. Retrying it is the loop that hung,
+  # so it exits rather than reprompting.
+  if ! read -r -p "  Choose [1-${#LINES[@]}]: " CHOICE; then
+    printf '\n  Nothing read. Committing with your global identity.\n\n'
+    chain_local "$@"
+  fi
   if [[ "$CHOICE" =~ ^[0-9]+$ ]] && [ "$CHOICE" -ge 1 ] && [ "$CHOICE" -le "${#LINES[@]}" ]; then
     break
   fi

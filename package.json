@@ -34,11 +34,10 @@
     "demo:doctor": "HOME=/tmp/ipile-demo ./bin/ipile doctor",
     "demo:tree": "find /tmp/ipile-demo -maxdepth 2 2>/dev/null || echo 'no sandbox yet, run: pnpm demo'",
     "demo:clean": "rm -rf /tmp/ipile-demo",
-    "check": "bash -n bin/ipile lib/*.sh lib/core/*.sh lib/modules/*.sh",
+    "check": "bash -n bin/ipile lib/*.sh lib/core/*.sh lib/modules/*.sh lib/assets/shell/*.sh lib/assets/hooks/pre-commit lib/assets/hooks/pre-push",
     "lint": "scripts/shellcheck.sh",
     "lint:install": "scripts/shellcheck.sh --install",
     "build": "bash build-and-install.sh",
     "test": "pnpm run check && pnpm run lint"
-  },
-  "packageManager": "pnpm@11.21.0"
+  }
 }

@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
 # Git identity profiles: discovery, reconciliation, key registration.
 #
+# THE HOOK LIST LIVES HERE
+#
+# Every client-side hook ipile installs, in one place, because both the
+# git-hooks module and doctor need it and a list written twice is a list
+# that drifts. doctor once checked eight of these while the module
+# installed sixteen, and reported all green.
+#
+# Excluded on purpose: reference-transaction and post-index-change, which
+# fire hundreds of times per fetch; the server-side hooks, which never run
+# on a developer's machine; and fsmonitor-watchman, which core.fsmonitor
+# selects rather than the hooks directory.
+IPILE_GIT_HOOKS="pre-commit pre-push commit-msg prepare-commit-msg post-commit post-merge post-checkout pre-rebase post-rewrite pre-merge-commit applypatch-msg pre-applypatch post-applypatch pre-auto-gc push-to-checkout sendemail-validate"
+#
 # THE FOUR SOURCES OF TRUTH
 #
 # A fully configured profile exists in four independent places:

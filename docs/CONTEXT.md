@@ -151,6 +151,28 @@ needs doing. The menu offers test again, show the key, open the keys
 page, regenerate, skip this account, or continue anyway, and it repeats
 until the test passes or the user explicitly gives up.
 
+**The author is set at commit time, the key at push time. They are not
+the same decision.** A repository has one `user.email`, so it authors as
+one identity no matter how many remotes it has. What a remote's SSH host
+alias selects is which *key* authenticates that push. `gremote` writes
+the alias into the remote URL and records the profile in
+`remote.<name>.ipileidentity`; `pre-push` compares the authors of the
+outgoing commits against that profile and warns. It warns rather than
+blocks, because the only fix is a rebase and whether that is worth it is
+the user's call. Any future attempt to "set the identity per remote" runs
+into this: git stamps the author into the commit object, and changing it
+afterwards rewrites every SHA.
+
+**A hook cannot prompt on stdin.** Git runs hooks with stdin closed, so
+`read` returns EOF immediately. `pre-commit`'s identity fallback looped
+forever on that, hanging any commit from an IDE, a script or a rebase in
+a repo with no detected identity. Prompting now requires opening
+`/dev/tty` in a test first, because the device can exist and still refuse
+to open, and a failed `exec` redirect prints its own error before it can
+be suppressed. `pre-push` is the other trap: it receives its ref list on
+stdin, so a hook that reads it must replay it to the repo-local hook
+rather than `exec`ing and expecting an unread stream to be inherited.
+
 **Host is a per-profile field, never hardcoded.** Someone will be on
 GitLab, Bitbucket, Gitea, or a self-hosted enterprise instance. This is
 also why `gclone` rewrites URLs per the profile's own host: supporting

@@ -7,6 +7,26 @@ MODULE_EMOJI="⚙️"
 MODULE_DESC="Git config and 11 aliases"
 MODULE_NEEDS="git-install"
 
+# === Version gate
+#
+# ipile installs onto whatever git the distro shipped, and Ubuntu 22.04 is
+# still on 2.34. A key git does not understand is not ignored: it fails at
+# the moment you need it, during a merge or a rebase, which is the worst
+# possible time to discover a config file is wrong. So anything newer than
+# roughly 2020 is gated and falls back.
+
+# git_globals_atleast <major> <minor>. True when the installed git is at
+# least that version.
+git_globals_atleast() {
+  local ver major minor
+  ver="$(git --version 2>/dev/null | sed -n 's/^git version \([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1 \2/p')"
+  [ -n "$ver" ] || return 1
+  major="${ver%% *}"
+  minor="${ver##* }"
+  [ "$major" -gt "$1" ] && return 0
+  [ "$major" -eq "$1" ] && [ "$minor" -ge "$2" ]
+}
+
 # === Data
 #
 # One key/value pair per line, key and value separated by the first tab.
@@ -18,17 +38,55 @@ git_globals_pairs() {
     "core.editor	code --wait" \
     "core.autocrlf	false" \
     "core.safecrlf	warn" \
-    "pull.rebase	true" \
+    "pull.rebase	false" \
     "rebase.autoStash	true" \
+    "merge.autoStash	true" \
     "push.default	current" \
     "push.autoSetupRemote	true" \
+    "push.followTags	true" \
     "fetch.prune	true" \
-    "merge.conflictstyle	diff3" \
+    "fetch.parallel	0" \
     "diff.colorMoved	zebra" \
+    "diff.algorithm	histogram" \
+    "diff.mnemonicPrefix	true" \
     "rerere.enabled	true" \
+    "rerere.autoUpdate	true" \
+    "commit.verbose	true" \
+    "branch.sort	-committerdate" \
+    "tag.sort	version:refname" \
+    "column.ui	auto" \
+    "transfer.fsckObjects	true" \
+    "fetch.fsckObjects	true" \
     "color.ui	auto" \
-    "help.autocorrect	10" \
     "log.date	iso"
+
+  # zdiff3 is diff3 with the lines both sides share hoisted out of the
+  # conflict, so the markers cover only what actually disagrees.
+  if git_globals_atleast 2 35; then
+    printf '%s\n' "merge.conflictstyle	zdiff3"
+  else
+    printf '%s\n' "merge.conflictstyle	diff3"
+  fi
+
+  # 'prompt' asks before running the correction. A number is a countdown
+  # after which git runs it on your behalf, which is the one behaviour
+  # this tool should not ship: 0 still suggests, it just will not act.
+  if git_globals_atleast 2 42; then
+    printf '%s\n' "help.autocorrect	prompt"
+  else
+    printf '%s\n' "help.autocorrect	0"
+  fi
+
+  # Rebasing a stack of branches moves every branch in it, instead of
+  # leaving the intermediate ones on abandoned commits.
+  git_globals_atleast 2 38 && printf '%s\n' "rebase.updateRefs	true"
+
+  # The built-in filesystem monitor, and the bundle of large-repo index
+  # settings that goes with it.
+  git_globals_atleast 2 37 && printf '%s\n' "core.fsmonitor	true"
+  git_globals_atleast 2 24 && printf '%s\n' "feature.manyFiles	true"
+
+  return 0
 }
 
 # The 11 aliases. The old dev-setup.sh shipped only 10 and dropped
@@ -51,10 +109,18 @@ git_globals_aliases() {
 # === Contract
 
 describe() {
-  ui_info "Sets git's global behaviour: rebase on pull, autostash, prune on"
-  ui_info "fetch, push the current branch and create the remote branch,"
-  ui_info "diff3 conflict markers, zebra moved-line colouring and rerere."
+  ui_info "Sets git's global behaviour: autostash on rebase and merge, prune"
+  ui_info "on fetch, push the current branch and create the remote branch,"
+  ui_info "push annotated tags with it, three-way conflict markers, zebra"
+  ui_info "moved-line colouring, histogram diffs and rerere with autoupdate."
+  ui_info "Rejects malformed objects on fetch and push (fsckObjects)."
+  ui_info "Shows the diff while you write a commit message, sorts branches"
+  ui_info "by date and tags by version, and lists them in columns."
   ui_info "Sets core.editor to 'code --wait' and log.date to iso."
+  ui_info "A mistyped command is suggested, never run for you."
+  ui_info "Anything needing a newer git than this machine has is skipped or"
+  ui_info "falls back, so an older distro gets a working config, not a broken"
+  ui_info "one. This git is $(git --version 2>/dev/null | sed 's/^git version //')."
   ui_info "Installs 11 aliases: lg, ll, st, co, br, undo, unstage, wip,"
   ui_info "unwip, aliases and whoami."
   ui_info "Everything is written to ~/.gitconfig with git config --global,"

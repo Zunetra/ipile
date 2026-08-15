@@ -143,7 +143,7 @@ if [ -z "$hooks_path" ]; then
   warn "core.hooksPath is not set, so the identity hooks are not active"
 else
   ok "core.hooksPath is ${hooks_path}"
-  for h in pre-commit pre-push commit-msg prepare-commit-msg post-commit post-merge post-checkout pre-rebase; do
+  for h in $IPILE_GIT_HOOKS; do
     if [ -f "${hooks_path}/${h}" ]; then
       if [ -x "${hooks_path}/${h}" ]; then
         # The handover resolves the repo's hook via rev-parse --git-dir

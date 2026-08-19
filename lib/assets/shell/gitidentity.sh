@@ -54,7 +54,7 @@ _ipile_pick_identity() {
     name=$(_ipile_field "$line" 2)
     email=$(_ipile_field "$line" 3)
     printf '  [%d]  %s <%s>  \033[2m(%s)\033[0m\n' "$n" "$name" "$email" "$alias"
-  done < "$f"
+  done <"$f"
   printf '\n'
 
   # The prompt is printed rather than passed to read, because read's own
@@ -65,7 +65,7 @@ _ipile_pick_identity() {
     printf '  Choose [1-%d]: ' "$count"
     read -r choice || return 1
     case "$choice" in
-      ''|*[!0-9]*) ;;
+      '' | *[!0-9]*) ;;
       *) [ "$choice" -ge 1 ] && [ "$choice" -le "$count" ] && break ;;
     esac
     printf '  Enter a number between 1 and %d.\n' "$count"

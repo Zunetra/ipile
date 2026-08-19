@@ -11,15 +11,41 @@
 
 IDENTITIES_FILE="$HOME/.gitidentities"
 
-# chain_local. Runs the repo's own pre-commit if it has one, passing every
-# argument and this hook's stdin through, and exits with its status.
-chain_local() {
-  local git_dir local_hook
+# find_repo_hook. Prints the path to the repository's own hook, or nothing.
+#
+# Two places, because .git/hooks is no longer where a repo necessarily keeps
+# one. husky writes .husky/<name> and points a repo-local core.hooksPath at
+# .husky/_; lefthook and others do their own variant.
+#
+# Worth being precise about what this does and does not solve. A repo-local
+# core.hooksPath REPLACES the global one, so when husky is fully installed
+# this file is never executed at all and nothing here can help. What it does
+# cover is the window before that: a fresh clone where .husky/ is committed
+# but `pnpm install` has not run yet, so the local hooksPath is unset and the
+# repo's checks would otherwise be skipped in silence. `ipile doctor` reports
+# the case this cannot reach.
+find_repo_hook() {
+  local name="$1" git_dir candidate
   # --git-dir, not --git-path hooks: the latter honours core.hooksPath and
   # would resolve straight back to this file.
   git_dir="$(git rev-parse --git-dir 2>/dev/null || echo .git)"
-  local_hook="${git_dir}/hooks/pre-commit"
-  if [ -x "$local_hook" ] && [ ! "$local_hook" -ef "$0" ]; then
+
+  for candidate in "${git_dir}/hooks/${name}" ".husky/${name}"; do
+    # -ef guards against a candidate that resolves back to this file, which
+    # would recurse until the process table gave out.
+    if [ -x "$candidate" ] && [ ! "$candidate" -ef "$0" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# chain_local. Runs the repo's own pre-commit if it has one, passing every
+# argument and this hook's stdin through, and exits with its status.
+chain_local() {
+  local local_hook
+  if local_hook="$(find_repo_hook pre-commit)"; then
     exec "$local_hook" "$@"
   fi
   exit 0
@@ -71,7 +97,7 @@ LINES=()
 while IFS= read -r line; do
   [ -n "$line" ] || continue
   LINES+=("$line")
-done < "$IDENTITIES_FILE"
+done <"$IDENTITIES_FILE"
 
 [ "${#LINES[@]}" -eq 0 ] && chain_local "$@"
 
@@ -97,7 +123,7 @@ for idx in "${!LINES[@]}"; do
   F_ALIAS=$(echo "${LINES[$idx]}" | cut -d'|' -f1)
   F_NAME=$(echo "${LINES[$idx]}" | cut -d'|' -f2)
   F_EMAIL=$(echo "${LINES[$idx]}" | cut -d'|' -f3)
-  printf '  [%d]  %s <%s>  \033[2m(%s)\033[0m\n' "$((idx+1))" "$F_NAME" "$F_EMAIL" "$F_ALIAS"
+  printf '  [%d]  %s <%s>  \033[2m(%s)\033[0m\n' "$((idx + 1))" "$F_NAME" "$F_EMAIL" "$F_ALIAS"
 done
 printf '\n'
 
@@ -115,7 +141,7 @@ while true; do
   printf '  Please enter a number between 1 and %d.\n' "${#LINES[@]}"
 done
 
-SELECTED="${LINES[$((CHOICE-1))]}"
+SELECTED="${LINES[$((CHOICE - 1))]}"
 SEL_ALIAS=$(echo "$SELECTED" | cut -d'|' -f1)
 SEL_NAME=$(echo "$SELECTED" | cut -d'|' -f2)
 SEL_EMAIL=$(echo "$SELECTED" | cut -d'|' -f3)

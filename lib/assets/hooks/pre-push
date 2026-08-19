@@ -78,11 +78,30 @@ printf '\n'
 
 # === Chain
 #
+# Two candidate locations, because .git/hooks is no longer where a repo
+# necessarily keeps its hook. husky writes .husky/<name> and points a
+# repo-local core.hooksPath at .husky/_; lefthook and others differ again.
+#
+# A repo-local core.hooksPath REPLACES the global one, so when husky is fully
+# installed this file never runs and nothing here can help. What this covers
+# is the window before that: a fresh clone where .husky/ is committed but the
+# install that sets the local hooksPath has not run. `ipile doctor` reports
+# the case this cannot reach.
+#
 # --git-dir, not --git-path hooks: the latter honours core.hooksPath and
 # would resolve straight back to this file.
 GIT_DIR_PATH="$(git rev-parse --git-dir 2>/dev/null || echo .git)"
-LOCAL_HOOK="${GIT_DIR_PATH}/hooks/pre-push"
-if [ -x "$LOCAL_HOOK" ] && [ ! "$LOCAL_HOOK" -ef "$0" ]; then
+LOCAL_HOOK=""
+for CANDIDATE in "${GIT_DIR_PATH}/hooks/pre-push" ".husky/pre-push"; do
+  # -ef guards against a candidate resolving back to this file, which would
+  # recurse until the process table gave out.
+  if [ -x "$CANDIDATE" ] && [ ! "$CANDIDATE" -ef "$0" ]; then
+    LOCAL_HOOK="$CANDIDATE"
+    break
+  fi
+done
+
+if [ -n "$LOCAL_HOOK" ]; then
   # Replayed rather than exec'd, because the stream was already consumed.
   printf '%s\n' "$REFS" | "$LOCAL_HOOK" "$@"
   exit $?

@@ -17,7 +17,7 @@ gclone() {
   while IFS= read -r line; do
     [ -n "$line" ] || continue
     LINES+=("$line")
-  done < "$IDENTITIES_FILE"
+  done <"$IDENTITIES_FILE"
 
   if [ "${#LINES[@]}" -eq 0 ]; then
     echo "No identities configured in $IDENTITIES_FILE."
@@ -33,7 +33,7 @@ gclone() {
     G_ALIAS=$(echo "${LINES[$idx]}" | cut -d'|' -f1)
     G_NAME=$(echo "${LINES[$idx]}" | cut -d'|' -f2)
     G_EMAIL=$(echo "${LINES[$idx]}" | cut -d'|' -f3)
-    printf '  [%d]  %s <%s>  \033[2m(%s)\033[0m\n' "$((idx+1))" "$G_NAME" "$G_EMAIL" "$G_ALIAS"
+    printf '  [%d]  %s <%s>  \033[2m(%s)\033[0m\n' "$((idx + 1))" "$G_NAME" "$G_EMAIL" "$G_ALIAS"
   done
   echo ""
 
@@ -46,7 +46,7 @@ gclone() {
     printf '  Please enter a number between 1 and %d.\n' "${#LINES[@]}"
   done
 
-  local SELECTED="${LINES[$((CHOICE-1))]}"
+  local SELECTED="${LINES[$((CHOICE - 1))]}"
   local SEL_ALIAS SEL_NAME SEL_HOST REPO_PATH REWRITTEN
   SEL_ALIAS=$(echo "$SELECTED" | cut -d'|' -f1)
   SEL_NAME=$(echo "$SELECTED" | cut -d'|' -f2)

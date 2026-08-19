@@ -135,7 +135,10 @@ detect() {
 
   # A pipe would run the loop in a subshell and lose the counters, so the
   # list is materialised first and fed in as a here-document.
-  all="$(git_globals_pairs; git_globals_aliases)"
+  all="$(
+    git_globals_pairs
+    git_globals_aliases
+  )"
 
   while IFS= read -r line; do
     [ -n "$line" ] || continue
@@ -156,7 +159,10 @@ EOF
 apply() {
   local line key value
   local all
-  all="$(git_globals_pairs; git_globals_aliases)"
+  all="$(
+    git_globals_pairs
+    git_globals_aliases
+  )"
 
   ui_info "Applying git globals and aliases."
 
@@ -177,7 +183,10 @@ verify() {
   local missing=""
   local line key value current
   local all
-  all="$(git_globals_pairs; git_globals_aliases)"
+  all="$(
+    git_globals_pairs
+    git_globals_aliases
+  )"
 
   while IFS= read -r line; do
     [ -n "$line" ] || continue

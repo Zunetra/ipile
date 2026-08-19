@@ -105,8 +105,8 @@ accounts_offer_rename() {
   new_full="$(ident_full_alias "$host" "$new_short")"
   ui_info "Renaming ${full} to ${new_full}..."
 
-  [ -f "$HOME/.gitconfig-${short}" ] && \
-    run mv "$HOME/.gitconfig-${short}" "$HOME/.gitconfig-${new_short}"
+  [ -f "$HOME/.gitconfig-${short}" ] \
+    && run mv "$HOME/.gitconfig-${short}" "$HOME/.gitconfig-${new_short}"
 
   local key new_key
   key="$(ident_key_path "$short")"
@@ -153,7 +153,7 @@ accounts_repair() {
   ui_warn "${full} is incomplete: $(ident_explain_probe "$probe")"
   ui_confirm "Repair it?" "y" || return 0
 
-  [ -n "$name" ]  || ui_ask_valid "Full name for ${full}:" "" name \
+  [ -n "$name" ] || ui_ask_valid "Full name for ${full}:" "" name \
     valid_freetext "Enter a name. The | character is not allowed." || return 1
   [ -n "$email" ] || ui_ask_valid "Email for ${full}:" "" email \
     valid_email "Enter a full email address, like you@example.com." || return 1

@@ -117,13 +117,34 @@ cmd_run() {
 
   while [ $# -gt 0 ]; do
     case "$1" in
-      --only) only="$(printf '%s' "$2" | tr ',' ' ')"; shift 2 ;;
-      --only=*) only="$(printf '%s' "${1#*=}" | tr ',' ' ')"; shift ;;
-      --skip) skip="$(printf '%s' "$2" | tr ',' ' ')"; shift 2 ;;
-      --skip=*) skip="$(printf '%s' "${1#*=}" | tr ',' ' ')"; shift ;;
-      --yes|-y) IPILE_ASSUME_YES=1; shift ;;
-      --dry-run) IPILE_DRY_RUN=1; shift ;;
-      *) ui_err "Unknown option: $1"; return 1 ;;
+      --only)
+        only="$(printf '%s' "$2" | tr ',' ' ')"
+        shift 2
+        ;;
+      --only=*)
+        only="$(printf '%s' "${1#*=}" | tr ',' ' ')"
+        shift
+        ;;
+      --skip)
+        skip="$(printf '%s' "$2" | tr ',' ' ')"
+        shift 2
+        ;;
+      --skip=*)
+        skip="$(printf '%s' "${1#*=}" | tr ',' ' ')"
+        shift
+        ;;
+      --yes | -y)
+        IPILE_ASSUME_YES=1
+        shift
+        ;;
+      --dry-run)
+        IPILE_DRY_RUN=1
+        shift
+        ;;
+      *)
+        ui_err "Unknown option: $1"
+        return 1
+        ;;
     esac
   done
   export IPILE_ASSUME_YES IPILE_DRY_RUN
@@ -138,7 +159,10 @@ cmd_run() {
   if [ -n "$only" ]; then
     local id
     for id in $only; do
-      registry_exists "$id" || { ui_err "Unknown module: ${id}"; return 1; }
+      registry_exists "$id" || {
+        ui_err "Unknown module: ${id}"
+        return 1
+      }
     done
     # A module that cannot work without another one pulls it in, so
     # 'ipile git accounts' on a machine with no git installs git first
@@ -198,11 +222,26 @@ cmd_menu() {
     "Nothing, quit"
 
   case "$choice" in
-    1) registry_run $IPILE_MODULES; summary ;;
-    2) registry_run git-install git-identity git-accounts git-hooks git-globals; summary ;;
-    3) registry_run system rust node pkgmanagers; summary ;;
-    4) registry_run dotfiles; summary ;;
-    5) ui_info "Nothing changed."; exit 0 ;;
+    1)
+      registry_run $IPILE_MODULES
+      summary
+      ;;
+    2)
+      registry_run git-install git-identity git-accounts git-hooks git-globals
+      summary
+      ;;
+    3)
+      registry_run system rust node pkgmanagers
+      summary
+      ;;
+    4)
+      registry_run dotfiles
+      summary
+      ;;
+    5)
+      ui_info "Nothing changed."
+      exit 0
+      ;;
   esac
 }
 
@@ -231,7 +270,7 @@ cmd_restore() {
     for d in "$backups"/*; do
       [ -d "$d" ] || continue
       printf "  %-20s %s file(s)\n" "$(basename "$d")" \
-        "$(wc -l < "${d}/MANIFEST" 2>/dev/null | tr -d ' ' || printf '0')"
+        "$(wc -l <"${d}/MANIFEST" 2>/dev/null | tr -d ' ' || printf '0')"
     done
     echo ""
     echo -e "  ${DIM}Restore one with: ipile restore <run-id>${NC}"
@@ -240,14 +279,20 @@ cmd_restore() {
   fi
 
   local dir="${backups}/${run_id}"
-  [ -d "$dir" ] || { ui_err "No backup called ${run_id}"; return 1; }
+  [ -d "$dir" ] || {
+    ui_err "No backup called ${run_id}"
+    return 1
+  }
 
   echo ""
   ui_warn "This overwrites the current files with the versions from ${run_id}:"
   echo ""
   cat "${dir}/MANIFEST" 2>/dev/null | sed 's/^/    /'
   echo ""
-  ui_confirm "Restore them?" "n" || { ui_info "Nothing restored."; return 0; }
+  ui_confirm "Restore them?" "n" || {
+    ui_info "Nothing restored."
+    return 0
+  }
 
   local target flat
   while IFS= read -r target; do
@@ -257,7 +302,7 @@ cmd_restore() {
       cp -p "${dir}/${flat}" "$target"
       ui_ok "Restored ${target}"
     fi
-  done < "${dir}/MANIFEST"
+  done <"${dir}/MANIFEST"
 }
 
 summary() {
@@ -286,14 +331,17 @@ COMMAND="${1:-menu}"
 [ $# -gt 0 ] && shift
 
 case "$COMMAND" in
-  menu)             cmd_menu ;;
-  run)              cmd_run "$@" ;;
-  status)           cmd_status ;;
-  doctor)           bash "${IPILE_LIB}/doctor.sh" ;;
-  restore)          cmd_restore "$@" ;;
-  update)           bash "${IPILE_LIB}/update.sh" ;;
-  version|--version|-v) printf '%s\n' "$IPILE_VERSION" ;;
-  help|--help|-h)   usage; exit 0 ;;
+  menu) cmd_menu ;;
+  run) cmd_run "$@" ;;
+  status) cmd_status ;;
+  doctor) bash "${IPILE_LIB}/doctor.sh" ;;
+  restore) cmd_restore "$@" ;;
+  update) bash "${IPILE_LIB}/update.sh" ;;
+  version | --version | -v) printf '%s\n' "$IPILE_VERSION" ;;
+  help | --help | -h)
+    usage
+    exit 0
+    ;;
 
   # Backwards compatible names from before the refactor.
   dev-setup)
@@ -312,11 +360,15 @@ case "$COMMAND" in
     SUB="${1:-}"
     [ $# -gt 0 ] && shift
     case "$SUB" in
-      accounts|multiple-accounts) cmd_run --only git-accounts "$@" ;;
-      identity)                   cmd_run --only git-identity "$@" ;;
-      hooks)                      cmd_run --only git-hooks "$@" ;;
-      globals|config)             cmd_run --only git-globals "$@" ;;
-      *) ui_err "Unknown: ipile git ${SUB}"; usage; exit 1 ;;
+      accounts | multiple-accounts) cmd_run --only git-accounts "$@" ;;
+      identity) cmd_run --only git-identity "$@" ;;
+      hooks) cmd_run --only git-hooks "$@" ;;
+      globals | config) cmd_run --only git-globals "$@" ;;
+      *)
+        ui_err "Unknown: ipile git ${SUB}"
+        usage
+        exit 1
+        ;;
     esac
     ;;
 

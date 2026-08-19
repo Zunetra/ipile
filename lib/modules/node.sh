@@ -61,7 +61,10 @@ apply() {
   else
     ui_info "Downloading and running the nvm ${NVM_VERSION} install script."
     run sh -c "curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh | bash" \
-      || { ui_err "The nvm installer failed."; return 1; }
+      || {
+        ui_err "The nvm installer failed."
+        return 1
+      }
   fi
 
   node_load_nvm
@@ -90,8 +93,14 @@ apply() {
 
 verify() {
   node_load_nvm
-  command -v node >/dev/null 2>&1 || { ui_err "node is not on PATH."; return 1; }
-  command -v npm  >/dev/null 2>&1 || { ui_err "npm is not on PATH."; return 1; }
+  command -v node >/dev/null 2>&1 || {
+    ui_err "node is not on PATH."
+    return 1
+  }
+  command -v npm >/dev/null 2>&1 || {
+    ui_err "npm is not on PATH."
+    return 1
+  }
 
   local major
   major="$(node_major)"

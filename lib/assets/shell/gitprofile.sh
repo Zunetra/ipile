@@ -70,7 +70,7 @@ gitprofile() {
       MARKER=""
       [ "$G_NAME" = "$CURRENT_NAME" ] && [ "$G_EMAIL" = "$CURRENT_EMAIL" ] && MARKER=" (active)"
       printf '  %-20s  %s <%s>%s\n' "$G_ALIAS" "$G_NAME" "$G_EMAIL" "$MARKER"
-    done < "$IDENTITIES_FILE"
+    done <"$IDENTITIES_FILE"
     echo ""
     return 0
   fi

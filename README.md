@@ -5,7 +5,7 @@ machine from wherever it is to a working development setup: toolchains,
 git identities, SSH keys, commit signing that actually verifies, hooks,
 and a set of global editor configs.
 
-`ipile` is Yoruba for *foundation*. Plain ASCII everywhere a machine
+`ipile` is Yoruba for _foundation_. Plain ASCII everywhere a machine
 reads it, never the diacritic form. The workspace scaffolder and task
 runner is a separate tool, [culm](https://github.com/Zunetra/culm).
 
@@ -147,13 +147,13 @@ Two things follow from that:
 
 ## ✅ Requirements
 
-| Requirement | Note |
-| --- | --- |
-| **bash 3.2 or newer** | macOS's stock bash works. v3 needed bash 4 |
-| **Linux or macOS** | apt, dnf, pacman, apk, zypper or brew |
-| **`curl`** | Install, update, and the remote installers |
-| **`ssh` and `ssh-keygen`** | Keys, agent, connection test |
-| **`sudo`** on Linux | Only for the `system` and `git-install` modules |
+| Requirement                | Note                                            |
+| -------------------------- | ----------------------------------------------- |
+| **bash 3.2 or newer**      | macOS's stock bash works. v3 needed bash 4      |
+| **Linux or macOS**         | apt, dnf, pacman, apk, zypper or brew           |
+| **`curl`**                 | Install, update, and the remote installers      |
+| **`ssh` and `ssh-keygen`** | Keys, agent, connection test                    |
+| **`sudo`** on Linux        | Only for the `system` and `git-install` modules |
 
 Running as root is detected and needs an explicit confirmation. WSL is
 detected and warned about, because its ssh-agent does not persist across
@@ -266,35 +266,35 @@ ipile restore 20260814-212711 # put that run's files back
 
 ## 📋 Command reference
 
-| Command | What it does |
-| --- | --- |
-| `ipile` | Interactive menu, with a status table first |
-| `ipile run [options]` | Run modules |
-| `ipile <module>` | Run exactly one module |
-| `ipile status` | What is set up, changes nothing |
-| `ipile doctor` | Verify everything, changes nothing |
-| `ipile restore [run-id]` | List or restore a backup |
-| `ipile update` | Update ipile itself, checksum verified |
-| `ipile version` | Print the version |
+| Command                  | What it does                                |
+| ------------------------ | ------------------------------------------- |
+| `ipile`                  | Interactive menu, with a status table first |
+| `ipile run [options]`    | Run modules                                 |
+| `ipile <module>`         | Run exactly one module                      |
+| `ipile status`           | What is set up, changes nothing             |
+| `ipile doctor`           | Verify everything, changes nothing          |
+| `ipile restore [run-id]` | List or restore a backup                    |
+| `ipile update`           | Update ipile itself, checksum verified      |
+| `ipile version`          | Print the version                           |
 
 ### Run options
 
-| Option | Effect |
-| --- | --- |
-| `--only a,b,c` | Run only these modules |
-| `--skip a,b,c` | Run everything except these |
-| `--yes` | Take every default, never prompt. For CI |
-| `--dry-run` | Print every change, make none |
+| Option         | Effect                                   |
+| -------------- | ---------------------------------------- |
+| `--only a,b,c` | Run only these modules                   |
+| `--skip a,b,c` | Run everything except these              |
+| `--yes`        | Take every default, never prompt. For CI |
+| `--dry-run`    | Print every change, make none            |
 
 `--dry-run` is honoured by every write in the codebase, because they all
 go through one wrapper. It creates no files, not even a state file.
 
 ### Exit codes
 
-| Code | Meaning |
-| --- | --- |
-| `0` | Everything asked for succeeded, or was skipped |
-| `1` | A module failed, or the command could not start: unknown module, unsupported OS, a refused confirmation, a failed download |
+| Code | Meaning                                                                                                                    |
+| ---- | -------------------------------------------------------------------------------------------------------------------------- |
+| `0`  | Everything asked for succeeded, or was skipped                                                                             |
+| `1`  | A module failed, or the command could not start: unknown module, unsupported OS, a refused confirmation, a failed download |
 
 **A failed module does not abort the run**, because one broken step must
 not cost you the other nine. The run continues, reports
@@ -334,18 +334,18 @@ command line flags on every run.
 
 Ten, run in this order. Dependencies come before dependents.
 
-| Module | What it changes |
-| --- | --- |
-| `system` | System packages and build tools |
-| `rust` | rustup, the stable toolchain, rustfmt, clippy |
-| `node` | nvm, then Node 24 as the default, per [the manifest](#-pinned-versions) |
-| `pkgmanagers` | Corepack, pnpm, yarn |
-| `git-install` | Git itself |
-| `git-identity` | One identity: name, email, SSH key, signing |
-| `git-accounts` | Several identities, one per remote |
-| `git-hooks` | Global hooks, plus `gclone`, `gremote` and `gitprofile` |
-| `git-globals` | 30 git settings and 11 aliases, version gated |
-| `dotfiles` | VS Code, Prettier, solhint, lint-staged, gitignore |
+| Module         | What it changes                                                         |
+| -------------- | ----------------------------------------------------------------------- |
+| `system`       | System packages and build tools                                         |
+| `rust`         | rustup, the stable toolchain, rustfmt, clippy                           |
+| `node`         | nvm, then Node 24 as the default, per [the manifest](#-pinned-versions) |
+| `pkgmanagers`  | Corepack, pnpm, yarn                                                    |
+| `git-install`  | Git itself                                                              |
+| `git-identity` | One identity: name, email, SSH key, signing                             |
+| `git-accounts` | Several identities, one per remote                                      |
+| `git-hooks`    | Global hooks, plus `gclone`, `gremote` and `gitprofile`                 |
+| `git-globals`  | 30 git settings and 11 aliases, version gated                           |
+| `dotfiles`     | VS Code, Prettier, solhint, lint-staged, gitignore                      |
 
 Every module implements the same four functions, which is what makes the
 menu, `status`, `doctor` and `--dry-run` all work without special cases:
@@ -373,13 +373,13 @@ Everything ipile installs at a fixed version is declared in one file,
 `lib/manifest.sh`. Read it to know exactly what will land on your
 machine.
 
-| Variable | Value | What it pins |
-| --- | --- | --- |
-| `IPILE_NODE_VERSION` | `24` | Node major, installed and set as the nvm default |
-| `IPILE_NVM_VERSION` | `v0.40.7` | The nvm installer, fetched by tag |
-| `IPILE_PNPM_VERSION` | `latest` | Corepack shim target |
-| `IPILE_YARN_VERSION` | `stable` | Corepack shim target |
-| `IPILE_RUST_TOOLCHAIN` | `stable` | rustup channel |
+| Variable               | Value     | What it pins                                     |
+| ---------------------- | --------- | ------------------------------------------------ |
+| `IPILE_NODE_VERSION`   | `24`      | Node major, installed and set as the nvm default |
+| `IPILE_NVM_VERSION`    | `v0.40.7` | The nvm installer, fetched by tag                |
+| `IPILE_PNPM_VERSION`   | `latest`  | Corepack shim target                             |
+| `IPILE_YARN_VERSION`   | `stable`  | Corepack shim target                             |
+| `IPILE_RUST_TOOLCHAIN` | `stable`  | rustup channel                                   |
 
 **Node tracks the latest LTS major, not the newest release.** Even
 numbered majors only become LTS in the October after they ship, so for
@@ -419,12 +419,12 @@ Clone through `gclone` and the alias is baked into that repository's
 
 A profile lives in four independent places, and they drift:
 
-| Source | Holds |
-| --- | --- |
-| `~/.gitidentities` | One line per profile. Read by the hooks and helpers |
-| `~/.gitconfig-<alias>` | That profile's name, email, signing key |
-| `~/.ssh/config` | The `Host` block |
-| `~/.ssh/id_ed25519_<alias>` | The keypair |
+| Source                      | Holds                                               |
+| --------------------------- | --------------------------------------------------- |
+| `~/.gitidentities`          | One line per profile. Read by the hooks and helpers |
+| `~/.gitconfig-<alias>`      | That profile's name, email, signing key             |
+| `~/.ssh/config`             | The `Host` block                                    |
+| `~/.ssh/id_ed25519_<alias>` | The keypair                                         |
 
 `ipile git accounts` checks all four and prints a table before asking for
 anything, marking each profile complete or naming exactly what it is
@@ -472,13 +472,13 @@ this bug.
 Every field is checked as you type it, so a typo is caught at the prompt
 rather than three steps later in a failing `ssh -T`.
 
-| Field | Accepted | Rejected |
-| --- | --- | --- |
-| **Name** | Any text | Empty, or containing `\|`, which is the field separator in `~/.gitidentities` |
-| **Email** | Any address with a real domain, `you@work.co.uk` as readily as gmail | `email`, `foo@bar`, anything with a space |
-| **Host** | A bare hostname, `github.com` or `git.internal.dev` | Schemes, paths, ports, `https://github.com` |
-| **Username** | A handle, **or a pasted profile URL** | Anything that is not a valid handle once the URL is stripped |
-| **Alias** | Lowercase letters, digits, `.`, `-`, `_` | Uppercase or leading punctuation, since it becomes a filename |
+| Field        | Accepted                                                             | Rejected                                                                      |
+| ------------ | -------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| **Name**     | Any text                                                             | Empty, or containing `\|`, which is the field separator in `~/.gitidentities` |
+| **Email**    | Any address with a real domain, `you@work.co.uk` as readily as gmail | `email`, `foo@bar`, anything with a space                                     |
+| **Host**     | A bare hostname, `github.com` or `git.internal.dev`                  | Schemes, paths, ports, `https://github.com`                                   |
+| **Username** | A handle, **or a pasted profile URL**                                | Anything that is not a valid handle once the URL is stripped                  |
+| **Alias**    | Lowercase letters, digits, `.`, `-`, `_`                             | Uppercase or leading punctuation, since it becomes a filename                 |
 
 **Paste the URL if that is what you have.** All of these store
 `musathedev`:
@@ -530,7 +530,7 @@ Each profile has a host field, defaulting to `github.com`. GitLab,
 Bitbucket, Gitea and self hosted instances work. The alias prefix follows
 the host, so `github-work` and `gitlab-work` can coexist.
 
-Only the four hosts above are *recognised* by name; any other valid
+Only the four hosts above are _recognised_ by name; any other valid
 hostname is accepted once you confirm it. Recognition drives the typo
 suggestion, nothing else.
 
@@ -605,14 +605,14 @@ repository's config, surviving new shells and affecting nothing else.
 
 ## 🛡️ Safety
 
-| Guarantee | How |
-| --- | --- |
+| Guarantee                           | How                                                                                        |
+| ----------------------------------- | ------------------------------------------------------------------------------------------ |
 | **Nothing is overwritten unbacked** | Every write backs the file up to `~/.ipile/var/backups/<run-id>/` first, with a `MANIFEST` |
-| **Reversible** | `ipile restore <run-id>` puts them all back |
-| **Previewable** | `--dry-run` prints every change and makes none |
-| **Idempotent** | Running twice adds no duplicate config, aliases or shell functions |
-| **Auditable** | Every run writes a transcript to `~/.ipile/var/logs/` |
-| **Verified downloads** | Install and update both check SHA256 before unpacking |
+| **Reversible**                      | `ipile restore <run-id>` puts them all back                                                |
+| **Previewable**                     | `--dry-run` prints every change and makes none                                             |
+| **Idempotent**                      | Running twice adds no duplicate config, aliases or shell functions                         |
+| **Auditable**                       | Every run writes a transcript to `~/.ipile/var/logs/`                                      |
+| **Verified downloads**              | Install and update both check SHA256 before unpacking                                      |
 
 ### Hooks do not break your other hooks
 
@@ -769,7 +769,7 @@ pnpm demo:clean       # delete it
 
 `demo` sets `HOME=/tmp/ipile-demo`, so everything runs for real, writes
 real files, and none of them are yours. It is the honest way to see the
-flow, because a dry run can only tell you it *would* generate a key,
+flow, because a dry run can only tell you it _would_ generate a key,
 while the sandbox gives you the key, the `~/.ssh/config` block, and the
 retry menu when the connection test fails.
 
@@ -780,23 +780,23 @@ than in the fake home.
 
 ### Every script
 
-| Script | What it runs |
-| --- | --- |
-| `pnpm start` | `ipile` from the checkout, interactive menu |
-| `pnpm status` | `ipile status` |
-| `pnpm doctor` | `ipile doctor` |
-| `pnpm dry` | `ipile run --dry-run` |
-| `pnpm dry:yes` | `ipile run --dry-run --yes` |
-| `pnpm demo` | Full flow into `/tmp/ipile-demo` |
-| `pnpm demo:accounts` | The `git-accounts` module into the sandbox |
-| `pnpm demo:doctor` | `doctor` against the sandbox |
-| `pnpm demo:tree` | List what the sandbox produced |
-| `pnpm demo:clean` | Delete the sandbox |
-| `pnpm check` | `bash -n` across `bin/` and `lib/` |
-| `pnpm lint` | shellcheck, with the vetted exclusions |
-| `pnpm lint:install` | Fetch the shellcheck binary only |
-| `pnpm build` | Pack the tarball and write `SHA256SUMS` |
-| `pnpm test` | `check`, then `lint` |
+| Script               | What it runs                                |
+| -------------------- | ------------------------------------------- |
+| `pnpm start`         | `ipile` from the checkout, interactive menu |
+| `pnpm status`        | `ipile status`                              |
+| `pnpm doctor`        | `ipile doctor`                              |
+| `pnpm dry`           | `ipile run --dry-run`                       |
+| `pnpm dry:yes`       | `ipile run --dry-run --yes`                 |
+| `pnpm demo`          | Full flow into `/tmp/ipile-demo`            |
+| `pnpm demo:accounts` | The `git-accounts` module into the sandbox  |
+| `pnpm demo:doctor`   | `doctor` against the sandbox                |
+| `pnpm demo:tree`     | List what the sandbox produced              |
+| `pnpm demo:clean`    | Delete the sandbox                          |
+| `pnpm check`         | `bash -n` across `bin/` and `lib/`          |
+| `pnpm lint`          | shellcheck, with the vetted exclusions      |
+| `pnpm lint:install`  | Fetch the shellcheck binary only            |
+| `pnpm build`         | Pack the tarball and write `SHA256SUMS`     |
+| `pnpm test`          | `check`, then `lint`                        |
 
 `pnpm lint` prefers a `shellcheck` already on your `PATH` and otherwise
 downloads a static binary into `.tools/`, detecting linux or darwin and
@@ -919,9 +919,9 @@ ipile doctor     # see what v3 left broken
 
 The old command names still work and forward to the new ones:
 
-| v3 | v4 |
-| --- | --- |
-| `ipile dev-setup` | `ipile run` |
+| v3                            | v4                   |
+| ----------------------------- | -------------------- |
+| `ipile dev-setup`             | `ipile run`          |
 | `ipile git-multiple-accounts` | `ipile git accounts` |
 
 The two v3 scripts, `dev-setup.sh` and `git-multiple-accounts.sh`, are
@@ -940,7 +940,7 @@ reintroduced. The short version:
   are what make `--dry-run` and the backups work. A direct `cat >` or
   bare `git config` bypasses both.
 - **`detect()` must not write anything**, caches included. `rustup
-  component list` creating `~/.rustup` was a real dry run violation.
+component list` creating `~/.rustup` was a real dry run violation.
 - **Never overwrite user data without asking.** Existing keys are reused,
   appends are grep guarded, regeneration defaults to no.
 - **Config content lives in `lib/assets/`, never in a heredoc.** Two

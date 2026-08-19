@@ -56,10 +56,10 @@ ident_init() {
 # ugly but unambiguous and cannot collide.
 ident_host_label() {
   case "$1" in
-    github.com)    printf 'github' ;;
-    gitlab.com)    printf 'gitlab' ;;
+    github.com) printf 'github' ;;
+    gitlab.com) printf 'gitlab' ;;
     bitbucket.org) printf 'bitbucket' ;;
-    *)             printf '%s' "$(printf '%s' "$1" | tr '.' '-')" ;;
+    *) printf '%s' "$(printf '%s' "$1" | tr '.' '-')" ;;
   esac
 }
 
@@ -95,7 +95,7 @@ ident_field() {
   printf '%s' "$line" | cut -d'|' -f"$n"
 }
 
-ident_name()  { ident_field "$1" 2; }
+ident_name() { ident_field "$1" 2; }
 ident_email() { ident_field "$1" 3; }
 
 ident_host() {
@@ -276,7 +276,7 @@ ident_register_signer() {
   line="$(printf '%s %s' "$email" "$(cat "$pub")")"
   if ! grep -qxF "$line" "$file" 2>/dev/null; then
     fs_backup "$file"
-    printf '%s\n' "$line" >> "$file"
+    printf '%s\n' "$line" >>"$file"
   fi
   run git config --global gpg.ssh.allowedSignersFile "$file"
 }
@@ -346,10 +346,10 @@ ident_print_key() {
 
 ident_keys_url() {
   case "$1" in
-    github.com)    printf 'https://github.com/settings/keys' ;;
-    gitlab.com)    printf 'https://gitlab.com/-/user_settings/ssh_keys' ;;
+    github.com) printf 'https://github.com/settings/keys' ;;
+    gitlab.com) printf 'https://gitlab.com/-/user_settings/ssh_keys' ;;
     bitbucket.org) printf 'https://bitbucket.org/account/settings/ssh-keys/' ;;
-    *)             printf 'https://%s (your account SSH key settings)' "$1" ;;
+    *) printf 'https://%s (your account SSH key settings)' "$1" ;;
   esac
 }
 
@@ -457,7 +457,8 @@ ident_test_connection() {
       3) ident_manual_register "$pub" "$host" "$username" "$label" ;;
       4)
         local key="${pub%.pub}"
-        fs_backup "$key"; fs_backup "$pub"
+        fs_backup "$key"
+        fs_backup "$pub"
         run ssh-keygen -t ed25519 -C "$username" -f "$key" -N "" -q
         ui_ok "New key generated."
         ident_add_to_agent "$key"

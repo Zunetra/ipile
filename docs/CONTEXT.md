@@ -21,12 +21,12 @@ authoritative and outrank anything stated elsewhere.
 Every file in `lib/modules/` implements the same four functions, and
 nothing else is a module.
 
-| Function | Contract |
-| --- | --- |
-| `describe` | One line for the menu and for `ipile status`. No side effects. |
-| `detect` | Reports `installed`, `partial`, or `absent` by looking at the machine. **Must not write anything**, including caches. |
-| `apply` | Does the work. Honours `IPILE_DRY_RUN`. |
-| `verify` | Proves `apply` worked. `ipile doctor` calls this same function, so a check written once serves both. |
+| Function   | Contract                                                                                                              |
+| ---------- | --------------------------------------------------------------------------------------------------------------------- |
+| `describe` | One line for the menu and for `ipile status`. No side effects.                                                        |
+| `detect`   | Reports `installed`, `partial`, or `absent` by looking at the machine. **Must not write anything**, including caches. |
+| `apply`    | Does the work. Honours `IPILE_DRY_RUN`.                                                                               |
+| `verify`   | Proves `apply` worked. `ipile doctor` calls this same function, so a check written once serves both.                  |
 
 **`detect` writing to disk is a real bug, not a theoretical one.**
 `rustup component list` creates `~/.rustup` as a side effect, which broke
@@ -36,10 +36,10 @@ the dry-run guarantee below until it was guarded.
 transitively before anything runs.** A satisfied dependency is reported
 and skipped, not re-run.
 
-| Module | Needs |
-| --- | --- |
+| Module                                                                 | Needs         |
+| ---------------------------------------------------------------------- | ------------- |
 | `git-identity`, `git-accounts`, `git-hooks`, `git-globals`, `dotfiles` | `git-install` |
-| `pkgmanagers` | `node` |
+| `pkgmanagers`                                                          | `node`        |
 
 **A failed module does not abort the run, but it does reach the caller.**
 The runner reports the failure and continues, so one broken step cannot
@@ -196,7 +196,7 @@ The same bug reappeared the moment a new eval-assigning helper was added.
 `ui_ask_host` passed `__ui_value` to `ui_ask_valid`, which declares a
 local of exactly that name, so the `eval` wrote the callee's local and
 the caller read back an empty host. Prefixing is not enough on its own:
-each helper in a chain needs a *distinct* prefix, because the collision
+each helper in a chain needs a _distinct_ prefix, because the collision
 is now between two helpers rather than between a helper and its caller.
 
 **A failed `read` is EOF, not an empty answer.** `ui_ask` and
@@ -248,7 +248,7 @@ until the test passes or the user explicitly gives up.
 **The author is set at commit time, the key at push time. They are not
 the same decision.** A repository has one `user.email`, so it authors as
 one identity no matter how many remotes it has. What a remote's SSH host
-alias selects is which *key* authenticates that push. `gremote` writes
+alias selects is which _key_ authenticates that push. `gremote` writes
 the alias into the remote URL and records the profile in
 `remote.<name>.ipileidentity`; `pre-push` compares the authors of the
 outgoing commits against that profile and warns. It warns rather than
@@ -272,6 +272,57 @@ GitLab, Bitbucket, Gitea, or a self-hosted enterprise instance. This is
 also why `gclone` rewrites URLs per the profile's own host: supporting
 GitLab profiles while rewriting only `github.com` meant a profile could
 be created and then never used.
+
+---
+
+## Hooks: `core.hooksPath` is a single slot, not a stack
+
+`core.hooksPath` does not accumulate. A repository-local value **replaces**
+the global one rather than running after it, so in a repo that sets its own,
+ipile's hooks are never executed at all.
+
+This is what husky does. `husky init` writes `core.hooksPath = .husky/_` into
+the repo's local config, and from that moment the global identity hook is
+skipped there. Nothing errors. Commits keep working, they just stop prompting
+for an identity, which is the worst shape a failure can take.
+
+Two halves, and only the first is ipile's to solve:
+
+**Chaining down, which the shipped hooks do.** When ipile's hook does run, it
+looks for the repository's own hook in `<git-dir>/hooks/<name>` **and** in
+`.husky/<name>`. The second was added because husky keeps its scripts outside
+`.git/hooks`, so a fresh clone with `.husky/` committed but its install not
+yet run would silently skip the repo's checks. The passthrough hooks check
+both too, with two path stats rather than a fork, keeping the cost the
+generated hooks were designed around.
+
+**Chaining up, which the repository has to do.** Once a local `hooksPath` is
+set, no amount of cleverness in the global hook helps, because the global
+hook is the thing being bypassed. The repo's own hook must call ipile's on
+the way in:
+
+```bash
+# .husky/pre-commit
+G="$(git config --global --get core.hooksPath || true)"
+[ -n "$G" ] && [ -x "$G/pre-commit" ] && "$G/pre-commit" "$@"
+```
+
+`pre-push` needs one extra step. It receives its ref list on stdin and that
+stream can only be read once, so read it up front and replay it, rather than
+handing an already-consumed stream to the next hook:
+
+```bash
+# .husky/pre-push
+REFS="$(cat)"
+G="$(git config --global --get core.hooksPath || true)"
+if [ -n "$G" ] && [ -x "$G/pre-push" ]; then
+  printf '%s\n' "$REFS" | "$G/pre-push" "$@" || exit $?
+fi
+# ... and use "$REFS" for this repo's own checks too
+```
+
+`ipile doctor` detects the shadowing and prints this, because a problem that
+cannot be fixed from the global side should at least stop being invisible.
 
 ---
 

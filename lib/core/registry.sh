@@ -134,22 +134,42 @@ registry_run_one() {
       ui_menu choice "Skip, this is already done" "Run it again anyway" \
         "Show me what it does" "!Quit, stop the whole run"
       case "$choice" in
-        1) ui_skip "Skipped ${id}."; state_record_module "$id" "skipped"; return 0 ;;
-        3) echo ""; describe; echo ""
-           if ! ui_confirm "Run it?" "$default_run"; then
-             ui_skip "Skipped ${id}."; state_record_module "$id" "skipped"; return 0
-           fi ;;
+        1)
+          ui_skip "Skipped ${id}."
+          state_record_module "$id" "skipped"
+          return 0
+          ;;
+        3)
+          echo ""
+          describe
+          echo ""
+          if ! ui_confirm "Run it?" "$default_run"; then
+            ui_skip "Skipped ${id}."
+            state_record_module "$id" "skipped"
+            return 0
+          fi
+          ;;
         4) return "$REGISTRY_QUIT" ;;
       esac
     else
       ui_menu choice "Run it" "Skip it" "Show me what it does first" \
         "!Quit, stop the whole run"
       case "$choice" in
-        2) ui_skip "Skipped ${id}."; state_record_module "$id" "skipped"; return 0 ;;
-        3) echo ""; describe; echo ""
-           if ! ui_confirm "Run it?" "$default_run"; then
-             ui_skip "Skipped ${id}."; state_record_module "$id" "skipped"; return 0
-           fi ;;
+        2)
+          ui_skip "Skipped ${id}."
+          state_record_module "$id" "skipped"
+          return 0
+          ;;
+        3)
+          echo ""
+          describe
+          echo ""
+          if ! ui_confirm "Run it?" "$default_run"; then
+            ui_skip "Skipped ${id}."
+            state_record_module "$id" "skipped"
+            return 0
+          fi
+          ;;
         4) return "$REGISTRY_QUIT" ;;
       esac
     fi
@@ -213,7 +233,10 @@ registry_expand() {
       for dep in $need; do
         case "$wanted" in
           *" $dep "*) ;;
-          *) wanted="${wanted}${dep} "; changed=1 ;;
+          *)
+            wanted="${wanted}${dep} "
+            changed=1
+            ;;
         esac
       done
     done

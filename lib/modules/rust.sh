@@ -54,7 +54,10 @@ apply() {
   else
     ui_info "Downloading and running the rustup installer."
     run sh -c "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y" \
-      || { ui_err "The rustup installer failed."; return 1; }
+      || {
+        ui_err "The rustup installer failed."
+        return 1
+      }
   fi
 
   rust_load_env
@@ -80,13 +83,25 @@ apply() {
 
 verify() {
   rust_load_env
-  command -v rustc >/dev/null 2>&1 || { ui_err "rustc is not on PATH."; return 1; }
-  command -v cargo >/dev/null 2>&1 || { ui_err "cargo is not on PATH."; return 1; }
+  command -v rustc >/dev/null 2>&1 || {
+    ui_err "rustc is not on PATH."
+    return 1
+  }
+  command -v cargo >/dev/null 2>&1 || {
+    ui_err "cargo is not on PATH."
+    return 1
+  }
   rustc --version >/dev/null 2>&1 || return 1
   cargo --version >/dev/null 2>&1 || return 1
   if command -v rustup >/dev/null 2>&1; then
-    rust_has_component rustfmt || { ui_warn "rustfmt is not installed."; return 1; }
-    rust_has_component clippy  || { ui_warn "clippy is not installed."; return 1; }
+    rust_has_component rustfmt || {
+      ui_warn "rustfmt is not installed."
+      return 1
+    }
+    rust_has_component clippy || {
+      ui_warn "clippy is not installed."
+      return 1
+    }
   fi
   return 0
 }

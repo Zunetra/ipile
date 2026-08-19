@@ -41,7 +41,7 @@ fs_backup() {
   local flat
   flat="$(printf '%s' "${target#$HOME/}" | tr '/' '_')"
   cp -p "$target" "${dir}/${flat}"
-  printf '%s\n' "$target" >> "${dir}/MANIFEST"
+  printf '%s\n' "$target" >>"${dir}/MANIFEST"
 }
 
 # === Writing
@@ -60,7 +60,7 @@ fs_write() {
   fi
 
   mkdir -p "$(dirname "$dest")"
-  cat > "$dest"
+  cat >"$dest"
   chmod "$mode" "$dest"
 }
 
@@ -78,7 +78,7 @@ fs_install_asset() {
     return 1
   fi
 
-  fs_write "$dest" "$mode" < "$src"
+  fs_write "$dest" "$mode" <"$src"
 }
 
 # fs_assets_match <asset-name> <dest>. True when the file on disk is
@@ -113,7 +113,7 @@ fs_append_once() {
 
   fs_backup "$file"
   mkdir -p "$(dirname "$file")"
-  cat >> "$file"
+  cat >>"$file"
   return 0
 }
 
@@ -178,7 +178,7 @@ fs_warn_unsupported_shells() {
   local shell_name
   shell_name="$(basename "${SHELL:-}")"
   case "$shell_name" in
-    fish|nu)
+    fish | nu)
       ui_warn "Your shell is ${shell_name}. The gclone and gitprofile helpers are bash functions and will not load there."
       ui_info "Everything else on this machine still works. Only the two helpers are affected."
       ;;

@@ -1,0 +1,60 @@
+{
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.expand": false,
+  "explorer.fileNesting.patterns": {
+    "package.json": "package-lock.json, pnpm-lock.yaml, pnpm-workspace.yaml, yarn.lock, bun.lockb, .npmrc, .nvmrc, .node-version, .lintstagedrc*, .husky, .validate-branch-namerc*",
+    ".prettierrc": ".prettierignore, .prettierrc.*, .editorconfig",
+    "eslint.config.mjs": "eslint.*.config.mjs, .eslintrc*, .eslintignore, .eslintcache",
+    "tsconfig.json": "tsconfig.*.json, *.d.ts",
+    "README.md": "LICENSE, LICENSE.*, CLAUDE.md, CONTRIBUTING.md, CHANGELOG.md, CODE_OF_CONDUCT.md",
+    ".gitignore": ".gitattributes, .dockerignore",
+    ".env.example": ".env, .env.*, .envrc, env.d.ts",
+    "*.ts": "${capture}.js, ${capture}.d.ts",
+    "installer.sh": "build-and-install.sh, *.tar.gz, SHA256SUMS",
+    "docker-compose.yml": "docker-compose.*.yml, Dockerfile, Dockerfile.*, .dockerignore"
+  },
+
+  "files.exclude": {
+    "**/.git": true,
+    "**/.DS_Store": true,
+    "**/node_modules": true,
+    "target": true,
+    "var": true
+  },
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/node_modules/**": true,
+    "**/target/**": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "target": true,
+    "var": true,
+    "pnpm-lock.yaml": true
+  },
+
+  "files.eol": "\n",
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "files.trimFinalNewlines": true,
+
+  "editor.formatOnSave": true,
+  "editor.rulers": [80],
+  "editor.tabSize": 2,
+  "editor.insertSpaces": true,
+  "editor.detectIndentation": false,
+
+  "[javascript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[json]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[jsonc]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[markdown]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.wordWrap": "on"
+  },
+  "[shellscript]": { "editor.tabSize": 2 },
+
+  "prettier.requireConfig": true,
+  "npm.packageManager": "pnpm",
+
+  "cSpell.words": ["culm", "ipile", "Klassivox", "pnpm", "Zunetra"]
+}

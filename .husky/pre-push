@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+
+set -e
+
+# pre-push receives its ref list on stdin, and it can only be read once.
+# Reading it up front means it can be replayed to the global hook below and
+# still be available to the protected-branch loop at the end.
+REFS="$(cat)"
+
+# === Chain to ipile's own global hook
+#
+# Same reasoning as pre-commit: husky's local core.hooksPath shadows the
+# global one. Replayed rather than exec'd, because the stream is consumed.
+GLOBAL_HOOKS="$(git config --global --get core.hooksPath 2>/dev/null || true)"
+if [ -n "$GLOBAL_HOOKS" ] && [ -x "${GLOBAL_HOOKS}/pre-push" ]; then
+  printf '%s\n' "$REFS" | "${GLOBAL_HOOKS}/pre-push" "$@" || exit $?
+fi
+
+# === Branch name
+echo "Validating branch name..."
+pnpm exec validate-branch-name || {
+  echo "Invalid branch name. Push aborted."
+  exit 1
+}
+
+# === Full suite
+#
+# The whole tree, not just what changed: a shell library is sourced, so an
+# edit in one file breaks callers the diff never mentions.
+echo "Running checks..."
+pnpm run test || {
+  echo "Checks failed. Push aborted."
+  exit 1
+}
+
+echo "Verifying shell formatting..."
+scripts/shfmt.sh --check || {
+  echo "Shell formatting is off. Run 'pnpm format' and commit the result."
+  exit 1
+}
+
+# === Protected branches
+current_user=$(git config user.email)
+allowed_user='shownzy001@gmail.com'
+z40=0000000000000000000000000000000000000000
+
+check_heavy_files() {
+  echo "Checking for heavy files..."
+
+  _tmp=$(mktemp)
+
+  git ls-files | grep -E '\.(jpg|jpeg|png|gif|webp|ico|mp4|mp3|wav|pdf|zip|woff|woff2|ttf|otf)$' | while IFS= read -r file; do
+    size=$(wc -c <"$file" 2>/dev/null || echo 0)
+    if [ "$size" -gt $((100 * 1024)) ]; then
+      printf "  %s (%sKB)\n" "$file" "$((size / 1024))" >>"$_tmp"
+    fi
+  done
+  if [ -s "$_tmp" ]; then
+    echo "Heavy media files detected (over 100KB). Host them on a CDN - do not commit binaries to git:"
+    cat "$_tmp"
+    rm -f "$_tmp"
+    exit 1
+  fi
+  rm -f "$_tmp"
+
+  _tmp2=$(mktemp)
+
+  # The release tarball is a build artifact that is deliberately tracked, so
+  # it is exempt rather than a recurring false positive.
+  git ls-files | grep -v '^ipile\.tar\.gz$' | while IFS= read -r file; do
+    size=$(wc -c <"$file" 2>/dev/null || echo 0)
+    if [ "$size" -gt $((500 * 1024)) ]; then
+      printf "  %s (%sKB)\n" "$file" "$((size / 1024))" >>"$_tmp2"
+    fi
+  done
+  if [ -s "$_tmp2" ]; then
+    echo "Large files detected (over 500KB). Remove or gitignore them:"
+    cat "$_tmp2"
+    rm -f "$_tmp2"
+    exit 1
+  fi
+  rm -f "$_tmp2"
+
+  echo "No heavy files found."
+}
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/develop)
+      if [ "$local_sha" = "$z40" ]; then
+        echo "Deleting develop is restricted."
+        exit 1
+      fi
+      if ! git merge-base --is-ancestor "$remote_sha" "$local_sha"; then
+        echo "Force push to develop is restricted."
+        exit 1
+      fi
+      check_heavy_files
+      ;;
+
+    refs/heads/main)
+      if [ "$current_user" != "$allowed_user" ]; then
+        echo "Only $allowed_user can push to main."
+        exit 1
+      fi
+      if [ "$local_sha" = "$z40" ]; then
+        echo "Deleting main is restricted."
+        exit 1
+      fi
+      if ! git merge-base --is-ancestor "$remote_sha" "$local_sha"; then
+        echo "Force push to main is restricted."
+        exit 1
+      fi
+      check_heavy_files
+      ;;
+  esac
+done <<EOF_REFS
+$REFS
+EOF_REFS
+
+echo "Pre-push checks passed."
+
+exit 0

@@ -38,8 +38,11 @@ CHECK_NETWORK=0
 
 PROBLEMS=0
 
-ok()   { printf "  %b✓%b  %s\n" "$THEME_GREEN" "$NC" "$*"; }
-bad()  { printf "  %b✗%b  %s\n" "$RED" "$NC" "$*"; PROBLEMS=$((PROBLEMS + 1)); }
+ok() { printf "  %b✓%b  %s\n" "$THEME_GREEN" "$NC" "$*"; }
+bad() {
+  printf "  %b✗%b  %s\n" "$RED" "$NC" "$*"
+  PROBLEMS=$((PROBLEMS + 1))
+}
 warn() { printf "  %b!%b  %s\n" "$YELLOW" "$NC" "$*"; }
 note() { printf "     %b%s%b\n" "$DIM" "$*" "$NC"; }
 
@@ -52,7 +55,10 @@ ui_banner "ipile doctor" "$IPILE_DISTRO"
 echo -e "  ${BOLD}Modules${NC}"
 echo ""
 for id in $IPILE_MODULES; do
-  registry_load "$id" >/dev/null 2>&1 || { bad "${id} failed to load"; continue; }
+  registry_load "$id" >/dev/null 2>&1 || {
+    bad "${id} failed to load"
+    continue
+  }
   if verify >/dev/null 2>&1; then
     ok "$(printf '%-14s %s' "$id" "$MODULE_TITLE")"
   else
@@ -151,10 +157,10 @@ else
         # The handover resolves the repo's hook via rev-parse --git-dir
         # rather than a literal .git/hooks path, so look for the variable
         # it lands in, not the path.
-        # Case insensitive: the generated passthroughs use LOCAL_HOOK, the
-        # two hand written hooks use a chain_local helper with a lowercase
-        # local_hook inside it. Both are a valid handover.
-        if grep -qiE 'local_hook|chain_local|\.git/hooks/' "${hooks_path}/${h}" 2>/dev/null; then
+        # Case insensitive, and several spellings are valid: the generated
+        # passthroughs loop over candidates, pre-push uses LOCAL_HOOK, and
+        # pre-commit uses chain_local around find_repo_hook. All hand over.
+        if grep -qiE 'local_hook|chain_local|find_repo_hook|/hooks/|\.husky/' "${hooks_path}/${h}" 2>/dev/null; then
           ok "${h} installed and chains to the repository's own hook"
         else
           bad "${h} installed but does NOT chain"
@@ -165,6 +171,28 @@ else
       fi
     fi
   done
+
+  # A repository-local core.hooksPath REPLACES the global one rather than
+  # adding to it, so the identity hooks above never execute here at all.
+  # husky sets exactly this, and it is silent: commits keep working, they
+  # just stop picking an identity. Chaining cannot fix it from the global
+  # side, because the global side is what got skipped, so the repo's own
+  # hook has to call ipile's on the way in.
+  if git rev-parse --git-dir >/dev/null 2>&1; then
+    local_hooks_path="$(git config --local --get core.hooksPath 2>/dev/null || true)"
+    if [ -n "$local_hooks_path" ] && [ "$local_hooks_path" != "$hooks_path" ]; then
+      warn "This repo sets core.hooksPath to ${local_hooks_path}, so ipile's hooks are skipped here"
+      note "Nothing is broken machine wide. It applies to this repository only."
+      note "To get the identity prompt back, add this to the top of its own hook"
+      note "(for husky that is .husky/pre-commit and .husky/pre-push):"
+      note ""
+      note '  G="$(git config --global --get core.hooksPath || true)"'
+      note '  [ -n "$G" ] && [ -x "$G/pre-commit" ] && "$G/pre-commit" "$@"'
+      note ""
+      note "pre-push additionally needs its stdin replayed, since the ref list"
+      note "can only be read once. See docs/CONTEXT.md."
+    fi
+  fi
 fi
 
 # === Shell helpers
@@ -188,7 +216,7 @@ done
 
 shell_name="$(basename "${SHELL:-}")"
 case "$shell_name" in
-  fish|nu)
+  fish | nu)
     warn "Your shell is ${shell_name}, which cannot load these bash functions"
     ;;
 esac

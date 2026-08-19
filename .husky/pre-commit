@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+
+set -e
+
+# === Chain to ipile's own global hook
+#
+# husky sets a LOCAL core.hooksPath of .husky/_, and local config beats the
+# global one ipile installs. Without this, ipile's identity hook is dead in
+# ipile's own repository, which is the exact failure its source calls out by
+# name. It also cannot find us on its own: it chains to .git/hooks/pre-commit,
+# which husky never writes. So we chain upward to it instead.
+GLOBAL_HOOKS="$(git config --global --get core.hooksPath 2>/dev/null || true)"
+if [ -n "$GLOBAL_HOOKS" ] && [ -x "${GLOBAL_HOOKS}/pre-commit" ]; then
+  "${GLOBAL_HOOKS}/pre-commit" "$@" || exit $?
+fi
+
+# === Staged files only
+#
+# Syntax, formatting and lint run per staged file rather than over the tree.
+# The full sweep is pre-push's job, where a shellcheck download is acceptable.
+echo "Checking staged files..."
+pnpm exec lint-staged || {
+  echo "Staged file checks failed. Commit aborted."
+  exit 1
+}
+
+echo "Pre-commit checks passed."

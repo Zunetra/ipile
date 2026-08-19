@@ -26,7 +26,7 @@ install_shellcheck() {
   local url arch
   arch="$(uname -m)"
   case "$arch" in
-    x86_64)          arch="x86_64" ;;
+    x86_64) arch="x86_64" ;;
     aarch64 | arm64) arch="aarch64" ;;
     *)
       echo "shellcheck: no static build published for $arch" >&2
@@ -35,8 +35,8 @@ install_shellcheck() {
   esac
 
   url="https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.linux.${arch}.tar.xz"
-  [ "$(uname -s)" = "Darwin" ] &&
-    url="https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.darwin.${arch}.tar.xz"
+  [ "$(uname -s)" = "Darwin" ] \
+    && url="https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.darwin.${arch}.tar.xz"
 
   echo "Fetching shellcheck into .tools/ ..."
   mkdir -p "$TOOLS"

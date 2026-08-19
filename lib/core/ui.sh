@@ -39,11 +39,28 @@ LOGO_EMERALD='\033[38;2;16;185;129m'
 # Colour is a terminal affordance, not content. Piping into a file or a
 # pager, or setting NO_COLOR, must not produce escape sequences.
 if [ -n "${NO_COLOR:-}" ] || [ ! -t 1 ]; then
-  CYAN=''; GREEN=''; YELLOW=''; RED=''; MAGENTA=''
-  BOLD=''; DIM=''; NC=''; THEME_GREEN=''
-  PLATE1_LIT=''; PLATE1_DARK=''; PLATE2_LIT=''; PLATE2_DARK=''
-  PLATE3_LIT=''; PLATE3_DARK=''; GLOW=''
-  WORD1=''; WORD2=''; WORD3=''; WORD4=''; WORD5=''; LOGO_EMERALD=''
+  CYAN=''
+  GREEN=''
+  YELLOW=''
+  RED=''
+  MAGENTA=''
+  BOLD=''
+  DIM=''
+  NC=''
+  THEME_GREEN=''
+  PLATE1_LIT=''
+  PLATE1_DARK=''
+  PLATE2_LIT=''
+  PLATE2_DARK=''
+  PLATE3_LIT=''
+  PLATE3_DARK=''
+  GLOW=''
+  WORD1=''
+  WORD2=''
+  WORD3=''
+  WORD4=''
+  WORD5=''
+  LOGO_EMERALD=''
 fi
 
 RULE="  ──────────────────────────────────────────────────────────"
@@ -103,11 +120,11 @@ ui_heading() {
 }
 
 ui_info() { echo -e "  ${DIM}→ $*${NC}"; }
-ui_ok()   { echo -e "  ${THEME_GREEN}✓${NC}  $*"; }
+ui_ok() { echo -e "  ${THEME_GREEN}✓${NC}  $*"; }
 ui_warn() { echo -e "  ${YELLOW}⚠${NC}  $*"; }
-ui_err()  { echo -e "  ${RED}✗${NC}  $*" >&2; }
+ui_err() { echo -e "  ${RED}✗${NC}  $*" >&2; }
 ui_skip() { echo -e "  ${DIM}↷  $*${NC}"; }
-ui_dry()  { echo -e "  ${MAGENTA}[dry-run]${NC} ${DIM}$*${NC}"; }
+ui_dry() { echo -e "  ${MAGENTA}[dry-run]${NC} ${DIM}$*${NC}"; }
 
 ui_done() {
   echo ""
@@ -315,8 +332,8 @@ ui_confirm() {
     }
     answer="$(printf '%s' "${answer:-$default}" | tr '[:upper:]' '[:lower:]')"
     case "$answer" in
-      y|yes) return 0 ;;
-      n|no)  return 1 ;;
+      y | yes) return 0 ;;
+      n | no) return 1 ;;
       *) echo -e "  ${DIM}Answer y or n.${NC}" ;;
     esac
   done
@@ -338,7 +355,7 @@ ui_ask_int() {
     read -r -p "$(echo -e "  ${YELLOW}${prompt}${NC} ${DIM}[${default}]${NC} ")" __ui_value
     __ui_value="${__ui_value:-$default}"
     case "$__ui_value" in
-      ''|*[!0-9]*) echo -e "  ${DIM}Enter 0 or a positive whole number.${NC}" ;;
+      '' | *[!0-9]*) echo -e "  ${DIM}Enter 0 or a positive whole number.${NC}" ;;
       *) break ;;
     esac
   done
@@ -360,7 +377,7 @@ ui_menu() {
   for label in "$@"; do
     case "$label" in
       '!'*) echo -e "  ${RED}[${i}]  ${label#\!}${NC}" ;;
-      *)    echo -e "  ${YELLOW}[${i}]${NC}  ${label}" ;;
+      *) echo -e "  ${YELLOW}[${i}]${NC}  ${label}" ;;
     esac
     i=$((i + 1))
   done
@@ -374,7 +391,7 @@ ui_menu() {
   while true; do
     read -r -p "$(echo -e "  ${DIM}Choose [1-${count}]:${NC} ")" __ui_choice
     case "$__ui_choice" in
-      ''|*[!0-9]*) ;;
+      '' | *[!0-9]*) ;;
       *) if [ "$__ui_choice" -ge 1 ] && [ "$__ui_choice" -le "$count" ]; then break; fi ;;
     esac
     echo -e "  ${DIM}Enter a number between 1 and ${count}.${NC}"

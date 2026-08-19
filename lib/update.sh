@@ -44,8 +44,11 @@ verify_checksum() {
     printf 'Install it anyway? (y/N) '
     read -r answer
     case "$(printf '%s' "$answer" | tr '[:upper:]' '[:lower:]')" in
-      y|yes) return 0 ;;
-      *) echo "Aborted. Nothing was changed."; exit 1 ;;
+      y | yes) return 0 ;;
+      *)
+        echo "Aborted. Nothing was changed."
+        exit 1
+        ;;
     esac
   fi
 
@@ -85,6 +88,6 @@ verify_checksum
 echo "Installing..."
 mkdir -p "$INSTALL_DIR"
 tar -xzf "${TMP}/ipile.tar.gz" -C "$INSTALL_DIR" --overwrite
-printf '%s\n' "$LATEST" > "${INSTALL_DIR}/VERSION"
+printf '%s\n' "$LATEST" >"${INSTALL_DIR}/VERSION"
 
 echo "Updated to ${LATEST}. Restart your terminal."

@@ -1,0 +1,19 @@
+# Shell is shfmt's job, not prettier's. Prettier has no shell parser and
+# would either refuse these or, worse, be pointed at them by a future glob.
+bin/
+lib/
+scripts/
+.husky/
+
+# Generated, vendored, or not ours to reformat
+node_modules/
+.tools/
+target/
+var/
+pnpm-lock.yaml
+SHA256SUMS
+*.tar.gz
+LICENSE
+
+# Owner's working material, left exactly as written
+docs/Screens/

@@ -17,7 +17,7 @@ describe() {
 detect() {
   command -v curl >/dev/null 2>&1 || return 1
   command -v wget >/dev/null 2>&1 || return 1
-  command -v git  >/dev/null 2>&1 || return 1
+  command -v git >/dev/null 2>&1 || return 1
   if command -v cc >/dev/null 2>&1 || command -v gcc >/dev/null 2>&1 \
     || command -v clang >/dev/null 2>&1; then
     return 0

@@ -1,0 +1,30 @@
+# Read by editors and by shfmt, which picks its formatting up from here
+# rather than from flags. One source of truth means an editor save and
+# `pnpm format` cannot drift apart.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.md]
+# Two trailing spaces is a hard line break in Markdown.
+trim_trailing_whitespace = false
+
+[Makefile]
+indent_style = tab
+
+# shfmt reads these, and they were chosen by measuring against the existing
+# tree rather than by preference: switch_case_indent and binary_next_line both
+# match what lib/ already does. space_redirects is deliberately absent - it
+# would rewrite every `>/dev/null` in the codebase to `> /dev/null`, which is
+# churn, not a fix.
+[{*.sh,ipile,pre-commit,pre-push}]
+indent_size = 2
+switch_case_indent = true
+binary_next_line = true

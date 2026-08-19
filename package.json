@@ -2,6 +2,7 @@
   "name": "ipile",
   "version": "4.0.0",
   "private": true,
+  "type": "module",
   "description": "Machine bootstrap and git completion. Toolchains, git identities, hooks and global config, one skippable step at a time.",
   "keywords": [
     "bootstrap",
@@ -11,6 +12,9 @@
     "ssh",
     "multiple-git-accounts",
     "commit-signing",
+    "git-hooks",
+    "shell",
+    "bash",
     "cli"
   ],
   "author": "Olorunshogo Moses BAMTEFA",
@@ -23,7 +27,25 @@
     "url": "https://github.com/Zunetra/ipile/issues"
   },
   "homepage": "https://github.com/Zunetra/ipile#readme",
+  "os": [
+    "linux",
+    "darwin"
+  ],
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=10"
+  },
+  "packageManager": "pnpm@11.13.0",
+  "directories": {
+    "bin": "bin",
+    "lib": "lib",
+    "doc": "docs"
+  },
+  "bin": {
+    "ipile": "./bin/ipile"
+  },
   "scripts": {
+    "prepare": "husky",
     "start": "./bin/ipile",
     "status": "./bin/ipile status",
     "doctor": "./bin/ipile doctor",
@@ -37,7 +59,20 @@
     "check": "bash -n bin/ipile lib/*.sh lib/core/*.sh lib/modules/*.sh lib/assets/shell/*.sh lib/assets/hooks/pre-commit lib/assets/hooks/pre-push",
     "lint": "scripts/shellcheck.sh",
     "lint:install": "scripts/shellcheck.sh --install",
+    "format": "scripts/shfmt.sh && prettier --write .",
+    "format:check": "scripts/shfmt.sh --check && prettier --check .",
+    "format:install": "scripts/shfmt.sh --install",
     "build": "bash build-and-install.sh",
     "test": "pnpm run check && pnpm run lint"
+  },
+  "validate-branch-name": {
+    "pattern": "^(main|develop|live)$|^(feature|fix|refactor|hotfix|release|conflict|chore)/.*$",
+    "errorMsg": "Branch name structure: <type>/<description>\nAllowed prefixes: feature, fix, refactor, hotfix, release, conflict, chore"
+  },
+  "devDependencies": {
+    "husky": "9.1.7",
+    "lint-staged": "17.3.0",
+    "prettier": "3.9.6",
+    "validate-branch-name": "1.3.2"
   }
 }

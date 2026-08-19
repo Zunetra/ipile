@@ -28,8 +28,8 @@ detect() {
   local found=0
   local total=3
   command -v corepack >/dev/null 2>&1 && found=$((found + 1))
-  command -v pnpm     >/dev/null 2>&1 && found=$((found + 1))
-  command -v yarn     >/dev/null 2>&1 && found=$((found + 1))
+  command -v pnpm >/dev/null 2>&1 && found=$((found + 1))
+  command -v yarn >/dev/null 2>&1 && found=$((found + 1))
 
   [ "$found" -eq "$total" ] && return 0
   [ "$found" -gt 0 ] && return 2
@@ -76,7 +76,13 @@ verify() {
       return 1
     fi
   done
-  pnpm -v >/dev/null 2>&1 || { ui_err "pnpm does not run."; return 1; }
-  yarn -v >/dev/null 2>&1 || { ui_err "yarn does not run."; return 1; }
+  pnpm -v >/dev/null 2>&1 || {
+    ui_err "pnpm does not run."
+    return 1
+  }
+  yarn -v >/dev/null 2>&1 || {
+    ui_err "yarn does not run."
+    return 1
+  }
   return 0
 }

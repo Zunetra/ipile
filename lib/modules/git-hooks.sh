@@ -73,14 +73,23 @@ detect() {
   # The helpers count as present once any rc file has them.
   total=$((total + 2))
   for rc in $(fs_shell_rcs 2>/dev/null); do
-    fs_has_marker "$rc" "gclone()" && { have=$((have + 1)); break; }
+    fs_has_marker "$rc" "gclone()" && {
+      have=$((have + 1))
+      break
+    }
   done
   total=$((total + 1))
   for rc in $(fs_shell_rcs 2>/dev/null); do
-    fs_has_marker "$rc" "gremote()" && { have=$((have + 1)); break; }
+    fs_has_marker "$rc" "gremote()" && {
+      have=$((have + 1))
+      break
+    }
   done
   for rc in $(fs_shell_rcs 2>/dev/null); do
-    fs_has_marker "$rc" "gitprofile()" && { have=$((have + 1)); break; }
+    fs_has_marker "$rc" "gitprofile()" && {
+      have=$((have + 1))
+      break
+    }
   done
 
   [ "$have" -eq 0 ] && return 1
@@ -123,8 +132,13 @@ elif [ -f .git ]; then
 else
   d=\$(git rev-parse --git-dir 2>/dev/null || echo .git)
 fi
-LOCAL_HOOK="\${d}/hooks/${name}"
-[ -x "\$LOCAL_HOOK" ] && [ ! "\$LOCAL_HOOK" -ef "\$0" ] && exec "\$LOCAL_HOOK" "\$@"
+#
+# .husky/${name} is checked too, because husky keeps its hooks there rather
+# than in .git/hooks. Both checks are stats on a path, not a fork, so the
+# budget described above is intact.
+for c in "\${d}/hooks/${name}" ".husky/${name}"; do
+  [ -x "\$c" ] && [ ! "\$c" -ef "\$0" ] && exec "\$c" "\$@"
+done
 exit 0
 EOF
   done
@@ -149,7 +163,10 @@ EOF
     for helper in $GIT_SHELL_HELPERS; do
       file="${helper%%:*}"
       marker="${helper#*:}"
-      if { printf '\n'; cat "${IPILE_LIB}/assets/shell/${file}.sh"; } | fs_append_once "$rc" "$marker"; then
+      if {
+        printf '\n'
+        cat "${IPILE_LIB}/assets/shell/${file}.sh"
+      } | fs_append_once "$rc" "$marker"; then
         ui_ok "${marker} added to ${rc}"
         added=1
       fi
@@ -179,8 +196,8 @@ verify() {
   local found=1
   local rc
   for rc in $(fs_shell_rcs 2>/dev/null); do
-    if fs_has_marker "$rc" "gclone()" && fs_has_marker "$rc" "gremote()" &&
-       fs_has_marker "$rc" "gitprofile()" && fs_has_marker "$rc" "_ipile_identities_file()"; then
+    if fs_has_marker "$rc" "gclone()" && fs_has_marker "$rc" "gremote()" \
+      && fs_has_marker "$rc" "gitprofile()" && fs_has_marker "$rc" "_ipile_identities_file()"; then
       found=0
       break
     fi

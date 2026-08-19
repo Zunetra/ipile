@@ -13,7 +13,7 @@ state_file() {
 state_init() {
   fs_mkdir "$IPILE_VAR" 700
   [ "${IPILE_DRY_RUN:-0}" = "1" ] && return 0
-  [ -f "$(state_file)" ] || : > "$(state_file)"
+  [ -f "$(state_file)" ] || : >"$(state_file)"
 }
 
 state_get() {
@@ -40,8 +40,8 @@ state_set() {
 
   state_init
   local tmp="${file}.tmp"
-  grep -v "^${key}=" "$file" > "$tmp" 2>/dev/null || : > "$tmp"
-  printf '%s=%s\n' "$key" "$value" >> "$tmp"
+  grep -v "^${key}=" "$file" >"$tmp" 2>/dev/null || : >"$tmp"
+  printf '%s=%s\n' "$key" "$value" >>"$tmp"
   mv "$tmp" "$file"
 }
 
@@ -71,10 +71,10 @@ log_init() {
     printf 'os     %s (%s, pm=%s)\n' "$IPILE_OS" "$IPILE_DISTRO" "$IPILE_PM"
     printf 'user   %s\n' "$(whoami)"
     printf '\n'
-  } > "$IPILE_LOG"
+  } >"$IPILE_LOG"
 }
 
 log_line() {
   [ -n "${IPILE_LOG:-}" ] || return 0
-  printf '%s  %s\n' "$(date -u '+%H:%M:%S')" "$*" >> "$IPILE_LOG"
+  printf '%s  %s\n' "$(date -u '+%H:%M:%S')" "$*" >>"$IPILE_LOG"
 }

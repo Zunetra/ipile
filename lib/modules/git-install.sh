@@ -26,7 +26,10 @@ apply() {
     os_upgrade_one git
   else
     ui_info "Git not found. Installing it."
-    os_pm_install git || { ui_err "Could not install git."; return 1; }
+    os_pm_install git || {
+      ui_err "Could not install git."
+      return 1
+    }
   fi
 
   if [ "${IPILE_DRY_RUN:-0}" != "1" ]; then
@@ -41,7 +44,10 @@ apply() {
 }
 
 verify() {
-  command -v git >/dev/null 2>&1 || { ui_err "git is not on PATH."; return 1; }
+  command -v git >/dev/null 2>&1 || {
+    ui_err "git is not on PATH."
+    return 1
+  }
   git --version >/dev/null 2>&1 || return 1
   return 0
 }

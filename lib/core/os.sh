@@ -8,7 +8,7 @@
 os_detect() {
   case "$OSTYPE" in
     linux-gnu*) IPILE_OS="linux" ;;
-    darwin*)    IPILE_OS="mac" ;;
+    darwin*) IPILE_OS="mac" ;;
     *)
       ui_err "Unsupported OS: ${OSTYPE}"
       return 1
@@ -66,26 +66,26 @@ os_sudo() {
 # os_pm_refresh. Update the package index.
 os_pm_refresh() {
   case "$IPILE_PM" in
-    apt)    os_sudo apt-get update -qq ;;
-    dnf)    os_sudo dnf -q makecache ;;
+    apt) os_sudo apt-get update -qq ;;
+    dnf) os_sudo dnf -q makecache ;;
     pacman) os_sudo pacman -Syy --noconfirm ;;
-    apk)    os_sudo apk update -q ;;
+    apk) os_sudo apk update -q ;;
     zypper) os_sudo zypper --non-interactive refresh ;;
-    brew)   run brew update ;;
-    none)   ui_warn "No supported package manager found. Skipping refresh." ;;
+    brew) run brew update ;;
+    none) ui_warn "No supported package manager found. Skipping refresh." ;;
   esac
 }
 
 # os_pm_upgrade. Upgrade everything already installed.
 os_pm_upgrade() {
   case "$IPILE_PM" in
-    apt)    os_sudo apt-get upgrade -y -qq ;;
-    dnf)    os_sudo dnf -y -q upgrade ;;
+    apt) os_sudo apt-get upgrade -y -qq ;;
+    dnf) os_sudo dnf -y -q upgrade ;;
     pacman) os_sudo pacman -Su --noconfirm ;;
-    apk)    os_sudo apk upgrade -q ;;
+    apk) os_sudo apk upgrade -q ;;
     zypper) os_sudo zypper --non-interactive update ;;
-    brew)   run brew upgrade ;;
-    none)   ui_warn "No supported package manager found. Skipping upgrade." ;;
+    brew) run brew upgrade ;;
+    none) ui_warn "No supported package manager found. Skipping upgrade." ;;
   esac
 }
 
@@ -94,12 +94,12 @@ os_pm_upgrade() {
 os_pm_install() {
   [ $# -eq 0 ] && return 0
   case "$IPILE_PM" in
-    apt)    os_sudo apt-get install -y -qq "$@" ;;
-    dnf)    os_sudo dnf -y -q install "$@" ;;
+    apt) os_sudo apt-get install -y -qq "$@" ;;
+    dnf) os_sudo dnf -y -q install "$@" ;;
     pacman) os_sudo pacman -S --needed --noconfirm "$@" ;;
-    apk)    os_sudo apk add -q "$@" ;;
+    apk) os_sudo apk add -q "$@" ;;
     zypper) os_sudo zypper --non-interactive install "$@" ;;
-    brew)   run brew install "$@" ;;
+    brew) run brew install "$@" ;;
     none)
       ui_warn "No supported package manager. Install these yourself: $*"
       return 0
@@ -115,18 +115,18 @@ os_pm_pkg() {
   case "$logical" in
     build-essential)
       case "$IPILE_PM" in
-        apt)    printf 'build-essential' ;;
-        dnf)    printf 'gcc gcc-c++ make' ;;
+        apt) printf 'build-essential' ;;
+        dnf) printf 'gcc gcc-c++ make' ;;
         pacman) printf 'base-devel' ;;
-        apk)    printf 'build-base' ;;
+        apk) printf 'build-base' ;;
         zypper) printf 'gcc gcc-c++ make' ;;
-        brew)   printf '' ;;
+        brew) printf '' ;;
       esac
       ;;
     ca-certificates)
       case "$IPILE_PM" in
         brew) printf '' ;;
-        *)    printf 'ca-certificates' ;;
+        *) printf 'ca-certificates' ;;
       esac
       ;;
     *) printf '%s' "$logical" ;;
@@ -137,13 +137,13 @@ os_pm_pkg() {
 os_upgrade_one() {
   local pkg="$1"
   case "$IPILE_PM" in
-    apt)    os_sudo apt-get install -y --only-upgrade -qq "$pkg" || true ;;
-    dnf)    os_sudo dnf -y -q upgrade "$pkg" || true ;;
+    apt) os_sudo apt-get install -y --only-upgrade -qq "$pkg" || true ;;
+    dnf) os_sudo dnf -y -q upgrade "$pkg" || true ;;
     pacman) os_sudo pacman -S --needed --noconfirm "$pkg" || true ;;
-    apk)    os_sudo apk upgrade -q "$pkg" || true ;;
+    apk) os_sudo apk upgrade -q "$pkg" || true ;;
     zypper) os_sudo zypper --non-interactive update "$pkg" || true ;;
-    brew)   run brew upgrade "$pkg" || true ;;
-    none)   : ;;
+    brew) run brew upgrade "$pkg" || true ;;
+    none) : ;;
   esac
 }
 

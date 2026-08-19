@@ -14,7 +14,7 @@
 # reject the work address that is the whole reason this tool exists.
 valid_email() {
   case "$1" in
-    *[[:space:]]*|*'|'*) return 1 ;;
+    *[[:space:]]* | *'|'*) return 1 ;;
   esac
   printf '%s' "$1" | grep -Eq '^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$'
 }
@@ -30,7 +30,7 @@ valid_email() {
 # single-label host on an internal network stays reachable too.
 valid_host() {
   case "$1" in
-    *[[:space:]]*|*/*|*:*|*'|'*|.*|*.) return 1 ;;
+    *[[:space:]]* | */* | *:* | *'|'* | .* | *.) return 1 ;;
   esac
   printf '%s' "$1" | grep -Eq '^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$'
 }
@@ -131,8 +131,14 @@ str_distance() {
   local i j cost del ins sub
   local prev cur
 
-  [ "$la" -eq 0 ] && { printf '%s' "$lb"; return 0; }
-  [ "$lb" -eq 0 ] && { printf '%s' "$la"; return 0; }
+  [ "$la" -eq 0 ] && {
+    printf '%s' "$lb"
+    return 0
+  }
+  [ "$lb" -eq 0 ] && {
+    printf '%s' "$la"
+    return 0
+  }
 
   local -a prev_row cur_row
   for j in $(seq 0 "$lb"); do prev_row[j]=$j; done
@@ -142,9 +148,9 @@ str_distance() {
     for j in $(seq 1 "$lb"); do
       cost=1
       [ "${a:i-1:1}" = "${b:j-1:1}" ] && cost=0
-      del=$(( prev_row[j] + 1 ))
-      ins=$(( cur_row[j-1] + 1 ))
-      sub=$(( prev_row[j-1] + cost ))
+      del=$((prev_row[j] + 1))
+      ins=$((cur_row[j - 1] + 1))
+      sub=$((prev_row[j - 1] + cost))
       cur=$del
       [ "$ins" -lt "$cur" ] && cur=$ins
       [ "$sub" -lt "$cur" ] && cur=$sub

@@ -35,6 +35,7 @@ ipile
 - [Command reference](#-command-reference)
 - [Environment variables](#-environment-variables)
 - [The modules](#-the-modules)
+- [Pinned versions](#-pinned-versions)
 - [Git accounts](#-git-accounts)
 - [Safety](#-safety)
 - [Architecture](#-architecture)
@@ -88,6 +89,8 @@ Two things follow from that:
 - Non GitHub hosts as a per profile field: GitLab, Bitbucket, Gitea and
   self hosted instances
 - Drift detection across all four sources a profile lives in, with repair
+- Every prompt validated as you type, with a paste-the-URL-if-you-have-it
+  username field and a "did you mean github.com?" catch for host typos
 
 ### Several accounts in one repository
 
@@ -133,6 +136,8 @@ Two things follow from that:
 - SHA256 verification on install and update
 - Idempotent: a second run adds no duplicate config, aliases or shell
   functions
+- Nothing you typed is silently corrected: a questionable value is shown
+  back and confirmed, never rewritten behind your back
 
 ### Diagnostics
 
@@ -333,7 +338,7 @@ Ten, run in this order. Dependencies come before dependents.
 | --- | --- |
 | `system` | System packages and build tools |
 | `rust` | rustup, the stable toolchain, rustfmt, clippy |
-| `node` | nvm, then Node 24 as the default |
+| `node` | nvm, then Node 24 as the default, per [the manifest](#-pinned-versions) |
 | `pkgmanagers` | Corepack, pnpm, yarn |
 | `git-install` | Git itself |
 | `git-identity` | One identity: name, email, SSH key, signing |
@@ -361,6 +366,36 @@ and skipped, not re-run.
 Because `doctor` calls the same `verify()` the installer does, the
 diagnostic and the installer can never disagree about what "installed"
 means.
+
+## 📌 Pinned versions
+
+Everything ipile installs at a fixed version is declared in one file,
+`lib/manifest.sh`. Read it to know exactly what will land on your
+machine.
+
+| Variable | Value | What it pins |
+| --- | --- | --- |
+| `IPILE_NODE_VERSION` | `24` | Node major, installed and set as the nvm default |
+| `IPILE_NVM_VERSION` | `v0.40.7` | The nvm installer, fetched by tag |
+| `IPILE_PNPM_VERSION` | `latest` | Corepack shim target |
+| `IPILE_YARN_VERSION` | `stable` | Corepack shim target |
+| `IPILE_RUST_TOOLCHAIN` | `stable` | rustup channel |
+
+**Node tracks the latest LTS major, not the newest release.** Even
+numbered majors only become LTS in the October after they ship, so for
+half of every year "latest" and "latest LTS" are different answers. A
+machine bootstrap is the wrong place to run a Current release.
+
+**nvm is pinned by tag, never to a branch**, so a run months from now
+installs what was tested rather than whatever `main` holds that day.
+
+**pnpm, yarn and Rust have no hard pin**, and are declared anyway.
+Corepack's shims are overridden per project by `packageManager`, and
+`stable` is what a Rust toolchain is expected to track. Naming them keeps
+the manifest a complete answer rather than half of one.
+
+To change what a machine gets, edit `lib/manifest.sh`, run `pnpm dry` to
+see the effect, then release. No module hardcodes a version.
 
 ## 🔑 Git accounts
 
@@ -432,11 +467,72 @@ and then reports "No signature", which reads as a signing failure. v3's
 multi account script never wrote it, so every multi account machine had
 this bug.
 
+### What the prompts accept
+
+Every field is checked as you type it, so a typo is caught at the prompt
+rather than three steps later in a failing `ssh -T`.
+
+| Field | Accepted | Rejected |
+| --- | --- | --- |
+| **Name** | Any text | Empty, or containing `\|`, which is the field separator in `~/.gitidentities` |
+| **Email** | Any address with a real domain, `you@work.co.uk` as readily as gmail | `email`, `foo@bar`, anything with a space |
+| **Host** | A bare hostname, `github.com` or `git.internal.dev` | Schemes, paths, ports, `https://github.com` |
+| **Username** | A handle, **or a pasted profile URL** | Anything that is not a valid handle once the URL is stripped |
+| **Alias** | Lowercase letters, digits, `.`, `-`, `_` | Uppercase or leading punctuation, since it becomes a filename |
+
+**Paste the URL if that is what you have.** All of these store
+`musathedev`:
+
+```
+musathedev
+github.com/musathedev
+www.github.com/musathedev
+https://github.com/musathedev
+https://www.github.com/musathedev/
+git@github.com:musathedev
+```
+
+**An unrecognised host is questioned, not assumed.** The four hosts ipile
+knows are `github.com`, `gitlab.com`, `bitbucket.org` and `codeberg.org`.
+Type something close to one and it offers the correction:
+
+```
+  ⚠  gitbub is not a host I recognise.
+     Did you mean github.com? (Y/n)
+```
+
+Decline, and it asks whether you really meant it, defaulting to **no**:
+
+```
+  ⚠  gitbub is not one of the hosts I know.
+  →   github.com gitlab.com bitbucket.org codeberg.org
+     Is that really your origin host? (y/N)
+```
+
+Nothing is ever silently corrected. A self hosted forge is a legitimate
+answer, so the confirm exists to let you say yes, not to talk you out of
+it.
+
+Finally, the four values are shown back before anything is written:
+
+```
+  → Name      Olorunshogo Musa
+  → Email     you@example.com
+  → Host      github.com
+  → Username  musathedev
+
+  Is that right? (Y/n)
+```
+
 ### Non GitHub hosts
 
 Each profile has a host field, defaulting to `github.com`. GitLab,
 Bitbucket, Gitea and self hosted instances work. The alias prefix follows
 the host, so `github-work` and `gitlab-work` can coexist.
+
+Only the four hosts above are *recognised* by name; any other valid
+hostname is accepted once you confirm it. Recognition drives the typo
+suggestion, nothing else.
 
 ### Several accounts in one repository
 
@@ -579,10 +675,14 @@ describe()   detect()      apply()   verify()
                         |
                    lib/core/
     ui.sh    prompts and every line of output
+    validate.sh  pure predicates, no output, no tty
     os.sh    which OS, which package manager
     fs.sh    every write, every backup, --dry-run
     state.sh what a run did, for status and update
     identity.sh  the four sources of a git profile
+                        |
+                  lib/manifest.sh
+        every pinned version, data not logic
                         |
                    lib/assets/
       the config files, hooks and shell helpers,
@@ -599,6 +699,9 @@ Three properties fall out of that shape:
 - **A module is addable without touching anything else.** Drop a file in
   `lib/modules/`, add its id to the list, and the menu, `status`,
   `doctor`, `--only` and `--skip` all pick it up.
+- **Validation is testable on its own**, because `validate.sh` holds
+  predicates that print nothing and read nothing. Prompting, retrying and
+  every message live in `ui.sh`.
 
 ## 🗂️ Repository layout
 
@@ -609,6 +712,7 @@ ipile/
 ├── lib/
 │   ├── core/
 │   │   ├── ui.sh              Colours, banner, prompts, every output helper
+│   │   ├── validate.sh        Field predicates and forge recognition
 │   │   ├── os.sh              OS and package manager detection
 │   │   ├── fs.sh              Writes, backups, and the --dry-run wrapper
 │   │   ├── state.sh           What a run did, read by status and update
@@ -616,6 +720,7 @@ ipile/
 │   │   └── registry.sh        Module ordering and MODULE_NEEDS resolution
 │   ├── modules/               Ten modules, one contract
 │   ├── assets/                Config files, hooks and shell helpers
+│   ├── manifest.sh            Every pinned version, in one place
 │   ├── doctor.sh              Verify everything, change nothing
 │   └── update.sh              Self update, checksum verified
 ├── scripts/
@@ -716,7 +821,7 @@ that yet.
 
 Releasing:
 
-1. Edit the scripts
+1. Edit the scripts, and `lib/manifest.sh` if a pinned version moved
 2. Bump `version.txt`
 3. `pnpm build`
 4. Publish `installer.sh`, `ipile.tar.gz`, `version.txt` and

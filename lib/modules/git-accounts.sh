@@ -70,7 +70,8 @@ accounts_fold_orphan() {
   echo ""
   ui_confirm "Turn it into a named profile so it can sit alongside the others?" "y" || return 0
 
-  ui_ask "Give it a short alias (personal, work, client):" "personal" alias || return 1
+  ui_ask_valid "Give it a short alias (personal, work, client):" "personal" alias \
+    valid_alias "Lowercase letters, digits, dot, dash, underscore. It becomes a filename." || return 1
   full="$(ident_full_alias "github.com" "$alias")"
   key="$(ident_key_path "$alias")"
 
@@ -90,6 +91,16 @@ accounts_offer_rename() {
 
   ui_ask "Alias '${short}': press Enter to keep it, or type a new one:" "$short" new_short || return 0
   [ "$new_short" = "$short" ] && return 0
+
+  # Only the new alias is validated, never the default. The default is
+  # whatever is already on disk, and a legacy alias that fails today's
+  # rule must stay keepable, otherwise "press Enter to keep it" becomes a
+  # loop with no way out.
+  if ! valid_alias "$new_short"; then
+    ui_err "Lowercase letters, digits, dot, dash, underscore. It becomes a filename."
+    ui_warn "Keeping ${short}. Nothing was renamed."
+    return 0
+  fi
 
   new_full="$(ident_full_alias "$host" "$new_short")"
   ui_info "Renaming ${full} to ${new_full}..."
@@ -142,8 +153,10 @@ accounts_repair() {
   ui_warn "${full} is incomplete: $(ident_explain_probe "$probe")"
   ui_confirm "Repair it?" "y" || return 0
 
-  [ -n "$name" ]  || ui_ask "Full name for ${full}:" "" name  || return 1
-  [ -n "$email" ] || ui_ask "Email for ${full}:" "" email || return 1
+  [ -n "$name" ]  || ui_ask_valid "Full name for ${full}:" "" name \
+    valid_freetext "Enter a name. The | character is not allowed." || return 1
+  [ -n "$email" ] || ui_ask_valid "Email for ${full}:" "" email \
+    valid_email "Enter a full email address, like you@example.com." || return 1
 
   local key
   key="$(ident_key_path "$short")"
@@ -170,11 +183,14 @@ accounts_add_one() {
   ui_rule
   echo ""
 
-  ui_ask "Short alias for this account (personal, work, client):" "" alias || return 1
-  ui_ask "Full name, as it appears on commits:" "" name || return 1
-  ui_ask "Git host:" "github.com" host || return 1
-  ui_ask "Username on ${host}:" "" username || return 1
-  ui_ask "Email address:" "" email || return 1
+  ui_ask_valid "Short alias for this account (personal, work, client):" "" alias \
+    valid_alias "Lowercase letters, digits, dot, dash, underscore. It becomes a filename." || return 1
+  ui_ask_valid "Full name, as it appears on commits:" "" name \
+    valid_freetext "Enter a name. The | character is not allowed." || return 1
+  ui_ask_host "Git host:" "github.com" host || return 1
+  ui_ask_username "Username on ${host}:" "" username || return 1
+  ui_ask_valid "Email address:" "" email \
+    valid_email "Enter a full email address, like you@example.com." || return 1
 
   full="$(ident_full_alias "$host" "$alias")"
   key="$(ident_key_path "$alias")"

@@ -20,7 +20,11 @@ IPILE_HAD_FAILURE=0
 export IPILE_HOME IPILE_LIB IPILE_VAR IPILE_VERSION IPILE_RUN_ID
 
 # shellcheck source=/dev/null
+. "${IPILE_LIB}/manifest.sh"
+# shellcheck source=/dev/null
 . "${IPILE_LIB}/core/ui.sh"
+# shellcheck source=/dev/null
+. "${IPILE_LIB}/core/validate.sh"
 # shellcheck source=/dev/null
 . "${IPILE_LIB}/core/fs.sh"
 # shellcheck source=/dev/null

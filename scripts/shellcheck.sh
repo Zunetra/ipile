@@ -78,6 +78,7 @@ echo "Linting with $SHELLCHECK"
   bin/ipile \
   lib/core/*.sh \
   lib/modules/*.sh \
+  lib/manifest.sh \
   lib/doctor.sh \
   lib/update.sh \
   lib/assets/hooks/pre-commit \

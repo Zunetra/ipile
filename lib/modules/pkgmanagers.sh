@@ -8,7 +8,7 @@ MODULE_NEEDS="node"
 
 describe() {
   ui_info "Enables Corepack, which ships with Node 16 and newer."
-  ui_info "Activates pnpm@latest and yarn@stable through Corepack."
+  ui_info "Activates pnpm@${IPILE_PNPM_VERSION} and yarn@${IPILE_YARN_VERSION} through Corepack."
   ui_info "Nothing is installed globally with npm, so the shims stay"
   ui_info "pinned per project by the packageManager field."
   ui_info "Requires the node module to have run first."
@@ -42,8 +42,8 @@ apply() {
   if ! command -v corepack >/dev/null 2>&1; then
     if [ "${IPILE_DRY_RUN:-0}" = "1" ]; then
       ui_dry "corepack enable"
-      ui_dry "corepack prepare pnpm@latest --activate"
-      ui_dry "corepack prepare yarn@stable --activate"
+      ui_dry "corepack prepare pnpm@${IPILE_PNPM_VERSION} --activate"
+      ui_dry "corepack prepare yarn@${IPILE_YARN_VERSION} --activate"
       return 0
     fi
     ui_err "corepack is not on PATH. Run the node module first."
@@ -53,11 +53,11 @@ apply() {
   ui_info "Enabling Corepack."
   run corepack enable || return 1
 
-  ui_info "Activating pnpm@latest."
-  run corepack prepare pnpm@latest --activate || return 1
+  ui_info "Activating pnpm@${IPILE_PNPM_VERSION}."
+  run corepack prepare "pnpm@${IPILE_PNPM_VERSION}" --activate || return 1
 
-  ui_info "Activating yarn@stable."
-  run corepack prepare yarn@stable --activate || return 1
+  ui_info "Activating yarn@${IPILE_YARN_VERSION}."
+  run corepack prepare "yarn@${IPILE_YARN_VERSION}" --activate || return 1
 
   if [ "${IPILE_DRY_RUN:-0}" != "1" ]; then
     ui_ok "npm  $(npm -v 2>/dev/null)"

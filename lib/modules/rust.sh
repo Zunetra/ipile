@@ -3,10 +3,10 @@
 
 MODULE_TITLE="Rust via rustup"
 MODULE_EMOJI="🦀"
-MODULE_DESC="rustup, stable, rustfmt, clippy"
+MODULE_DESC="rustup, ${IPILE_RUST_TOOLCHAIN}, rustfmt, clippy"
 
 describe() {
-  ui_info "Installs rustup and the stable toolchain from sh.rustup.rs."
+  ui_info "Installs rustup and the ${IPILE_RUST_TOOLCHAIN} toolchain from sh.rustup.rs."
   ui_info "Adds the rustfmt and clippy components."
   ui_info "Loads \$HOME/.cargo/env into this shell so cargo is on PATH for"
   ui_info "the rest of the run without opening a new terminal."
@@ -49,8 +49,8 @@ rust_load_env() {
 
 apply() {
   if command -v rustup >/dev/null 2>&1; then
-    ui_info "rustup is already installed. Updating the stable toolchain."
-    run rustup update stable || ui_warn "Toolchain update reported a problem."
+    ui_info "rustup is already installed. Updating the ${IPILE_RUST_TOOLCHAIN} toolchain."
+    run rustup update "${IPILE_RUST_TOOLCHAIN}" || ui_warn "Toolchain update reported a problem."
   else
     ui_info "Downloading and running the rustup installer."
     run sh -c "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y" \

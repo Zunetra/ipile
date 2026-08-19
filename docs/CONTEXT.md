@@ -12,7 +12,7 @@ Org-level decisions, including how ipile is distributed, live in
 correction is appended under the section it belongs to. Corrections are
 authoritative and outrank anything stated elsewhere.
 
-**Last updated:** 2026-08-15
+**Last updated:** 2026-08-19
 
 ---
 
@@ -55,6 +55,85 @@ a git call like any other. Without the declaration, `ipile git accounts`
 on a machine with no git walked the user through generating a key and
 registering it on GitHub, then died on the first `git config`. That is
 the worst possible place to fail.
+
+---
+
+## Version pins live in the manifest
+
+**Every version this tool installs is declared in `lib/manifest.sh` and
+nowhere else.** A module that hardcodes a version is a bug, even when the
+constant is named and sits at the top of the file. The question "what
+will this put on my machine" has to be answerable by reading one file,
+not by grepping ten.
+
+`IPILE_NODE_VERSION` and `IPILE_NVM_VERSION` were constants at the top of
+`node.sh` before this. That was tidy and still wrong: the answer lived in
+the same place as the logic that consumed it, so it was findable only by
+someone who already knew where to look.
+
+**Node is pinned to the latest LTS major, never the newest release.**
+Even-numbered majors only become LTS in the October after they ship, so
+"latest" and "latest LTS" are different answers for half the year. A
+machine bootstrap is the wrong place to run a Current release.
+
+**Things with no hard pin are still declared.** `pnpm`, `yarn` and the
+Rust toolchain resolve to `latest`, `stable` and `stable`, and Corepack's
+shims are overridden per project by `packageManager` anyway. They are
+named in the manifest regardless, because a manifest that answers half
+the question sends people straight back to grepping the modules.
+
+**Anything that sources modules must source the manifest first.**
+`MODULE_DESC` is expanded at source time, so a caller that skips the
+manifest gets `nvm plus Node  as the default` with a hole in it.
+`doctor.sh` calls `registry_load` and shipped exactly that bug for the
+length of one commit.
+
+---
+
+## Input validation
+
+**Predicates are pure and live in `lib/core/validate.sh`. Prompting
+lives in `ui.sh`.** Nothing in `validate.sh` reads stdin or writes to the
+terminal, which is what keeps it callable from `doctor.sh` and from a
+test with no tty attached. Every predicate returns 0 or 1 and prints
+nothing; every message the user sees is printed by the caller.
+
+**Validate the shape, not the vendor.** Email is checked for structure
+and any domain passes. A `@gmail.com` allowlist would reject the work
+address that is the entire reason a multi-account tool exists.
+
+**Normalise before rejecting.** The username prompt asks for a handle,
+but a profile URL is what sits on the clipboard, so
+`gh_normalize_username` reduces every form of
+`https://www.github.com/user/` to `user` instead of erroring. A hard
+"must start with https://github.com/" rule would have turned the common
+case, typing a bare handle, into a failure.
+
+**Shape and plausibility are separate questions.** `valid_host` accepts
+single-label hosts, so `gitbub` passes the shape check and is caught by
+`forge_suggest` instead, which offers `github.com` at Levenshtein
+distance 1. Rejecting it at the shape check produces "enter a hostname"
+when what the user needs is "did you mean github.com?". The comparison
+runs on the label before the first dot: `gitbub` to `github.com` is
+distance 5, to `github` it is 1.
+
+**An unknown host warns and confirms, it never rewrites.** The four
+recognised forges are `github.com`, `gitlab.com`, `bitbucket.org` and
+`codeberg.org`. Anything else gets the suggestion if one is close, then a
+confirm that defaults to **no**, so a fat-fingered host is not waved
+through by someone hitting Enter on autopilot. Under `IPILE_ASSUME_YES`
+the suggestion is deliberately not applied: silently changing a value
+nobody can see being changed is worse than an odd host.
+
+**Validate the default too, under `IPILE_ASSUME_YES`.** Otherwise `--yes`
+becomes the supported route to writing garbage into `~/.gitconfig-*`
+while the interactive path refuses it.
+
+**Never validate a default that is already on disk.** The alias rename
+prompt in `git-accounts.sh` says "press Enter to keep it", so validating
+its default would trap anyone holding a legacy alias in a loop with no
+way out. The new value is validated after the fact instead, and a bad one
+abandons the rename rather than blocking the prompt.
 
 ---
 
@@ -112,6 +191,21 @@ caller, so `eval` wrote the helper's own local and the caller's was never
 set. Under `set -u` that crashed the retry loop outright, and it had been
 silently defaulting the runner to "run" for some time before that. All
 three eval-assigning helpers now prefix their internals.
+
+The same bug reappeared the moment a new eval-assigning helper was added.
+`ui_ask_host` passed `__ui_value` to `ui_ask_valid`, which declares a
+local of exactly that name, so the `eval` wrote the callee's local and
+the caller read back an empty host. Prefixing is not enough on its own:
+each helper in a chain needs a *distinct* prefix, because the collision
+is now between two helpers rather than between a helper and its caller.
+
+**A failed `read` is EOF, not an empty answer.** `ui_ask` and
+`ui_confirm` both looped on "this field is required" without checking the
+return, so the moment stdin closed they spun forever. A piped or
+backgrounded run produced 1.9MB of output in 120 seconds. Every prompt
+loop now returns 1 on a failed read. This is the same class of bug as
+`pre-commit` hanging on a closed stdin, and it will keep recurring
+wherever a loop treats "no input" and "no more input" as the same thing.
 
 **`export` after a failed command still succeeds.** `gitprofile` exported
 an empty git author when `git config` failed, so commits were silently
@@ -236,8 +330,5 @@ before assuming a file is committed.
   publishes a `SHA256SUMS` at the URL yet, so both warn and continue
   rather than protecting anyone. Until `version.txt` v4.0 is published,
   every command also prints a spurious update notice.
-- **Version pins in code.** `NODE_VERSION` and `NVM_VERSION` are named
-  constants at the top of `node.sh` rather than buried, but they belong
-  in a manifest.
 - **`ipile uninstall --revert`.** `ipile restore` covers files. Nothing
   yet reverses git config keys.

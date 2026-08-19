@@ -19,6 +19,8 @@ IPILE_ASSUME_YES=1
 export IPILE_HOME IPILE_LIB IPILE_VAR IPILE_VERSION IPILE_RUN_ID IPILE_DRY_RUN IPILE_ASSUME_YES
 
 # shellcheck source=/dev/null
+. "${IPILE_LIB}/manifest.sh"
+# shellcheck source=/dev/null
 . "${IPILE_LIB}/core/ui.sh"
 # shellcheck source=/dev/null
 . "${IPILE_LIB}/core/fs.sh"

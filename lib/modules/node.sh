@@ -3,14 +3,12 @@
 
 MODULE_TITLE="Node.js via nvm"
 MODULE_EMOJI="📦"
-MODULE_DESC="nvm plus Node 24 as the default"
+MODULE_DESC="nvm plus Node ${IPILE_NODE_VERSION} as the default"
 
-# Pin. Node is deliberately fixed to one major so every machine set up by
-# this tool lands on the same runtime. Bump it here when the team moves.
-NODE_VERSION="24"
-
-# Pin. The nvm installer is fetched by tag, never from a moving branch.
-NVM_VERSION="v0.40.4"
+# Both pins live in lib/manifest.sh. Read here, never redeclared, so
+# there is exactly one place to change what lands on a machine.
+NODE_VERSION="${IPILE_NODE_VERSION}"
+NVM_VERSION="${IPILE_NVM_VERSION}"
 
 NVM_HOME="${NVM_DIR:-$HOME/.nvm}"
 

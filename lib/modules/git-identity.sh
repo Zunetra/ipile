@@ -52,10 +52,12 @@ apply() {
   name="$(git config --global user.name 2>/dev/null || true)"
   email="$(git config --global user.email 2>/dev/null || true)"
 
-  ui_ask "Your full name, as it should appear on commits:" "$name" name || return 1
-  ui_ask "Your email address:" "$email" email || return 1
-  ui_ask "Your git host:" "github.com" host || return 1
-  ui_ask "Your username on ${host}:" "" username || return 1
+  ui_ask_valid "Your full name, as it should appear on commits:" "$name" name \
+    valid_freetext "Enter your name. The | character is not allowed." || return 1
+  ui_ask_valid "Your email address:" "$email" email \
+    valid_email "Enter a full email address, like you@example.com." || return 1
+  ui_ask_host "Your git host:" "github.com" host || return 1
+  ui_ask_username "Your username on ${host}:" "" username || return 1
 
   echo ""
   ui_info "Name      ${name}"

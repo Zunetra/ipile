@@ -34,6 +34,8 @@ export IPILE_HOME IPILE_LIB IPILE_VAR IPILE_VERSION IPILE_RUN_ID
 # shellcheck source=/dev/null
 . "${IPILE_LIB}/core/identity.sh"
 # shellcheck source=/dev/null
+. "${IPILE_LIB}/core/projects.sh"
+# shellcheck source=/dev/null
 . "${IPILE_LIB}/core/registry.sh"
 
 IPILE_DRY_RUN=0
@@ -68,6 +70,8 @@ MODULES
   git-hooks      Global hooks, gclone and gitprofile
   git-globals    Git config and aliases
   dotfiles       Global editor and formatter configs
+  guard          dev-guard scanner, npm hardening, daily sweep
+  cleanup        Reclaim disk from caches, build artifacts, agent sessions
 
 RUN OPTIONS
   --only a,b,c   Run only these modules
@@ -199,6 +203,7 @@ cmd_run() {
   [ "$IPILE_DRY_RUN" = "1" ] && {
     echo ""
     ui_warn "Dry run. Nothing on this machine will change."
+    registry_overview
   }
 
   registry_run $targets

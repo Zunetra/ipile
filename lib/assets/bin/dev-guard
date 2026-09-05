@@ -1,0 +1,577 @@
+#!/usr/bin/env bash
+# dev-guard - detect and remove the build-config backdoor, and audit the
+# conditions that let it in.
+#
+# Scanning never modifies a file. Cleaning is a separate flag and is dry run
+# by default; pass --yes to actually rewrite anything.
+#
+# Companion to dev-cleanup. Same conventions: dry run first, --yes to act.
+#
+# Every check greps in batches rather than once per file. The first version
+# forked a grep per file and took 12.1s over 2931 files; the same sweep is
+# 0.79s batched. That difference is what makes --staged viable in a hook.
+
+set -uo pipefail
+
+DRY_RUN=1
+DO_SCAN=0
+DO_HEUR=0
+DO_PROCS=0
+DO_BRANCHES=0
+DO_SUPPLY=0
+DO_CLEAN=0
+ANY=0
+
+PROJECTS="$HOME/Projects"
+SCAN_ROOT=""
+
+# full   - walk a directory tree
+# staged - what is staged for commit, read from the index
+# since  - what changed between a ref and HEAD, i.e. what a pull brought in
+MODE="full"
+SINCE_REF=""
+
+FINDINGS=0
+CLEANED=0
+CLEAN_VERIFIED=0
+
+# Scratch for staged blobs and file lists. Removed on any exit.
+WORK=""
+
+# The signature of the known payload. Matches both the minified form
+# (global.o='7-c1287') and the Prettier-reformatted one, which has spaces
+# around the '='. Any pattern written by hand must match both.
+IOC_RE="global\.o *= *'7-"
+
+# Generic tells, each catching variants the signature will miss.
+PAD_RE='[[:space:]]{200,}[^[:space:]]'
+# grep -F prefilters for the two expensive patterns above. A bounded repeat
+# like {200,} costs 11.5s over 2659 files because grep cannot use its literal
+# fast path; the same sweep with a fixed string is 274ms, and the precise
+# regex then runs only on what the prefilter returned. PAD_LIT is 100 spaces,
+# half the threshold, so it cannot miss a real hit.
+PAD_LIT="$(printf '%*s' 100 '')"
+GLOBAL_LIT='global.'
+OBFUSC_RE='_\$_[0-9a-fA-F]{3,}'
+GLOBAL_RE="global\.[a-zA-Z_]{1,3} *= *['\"]"
+
+PRUNE_DIRS=(node_modules .git dist build out .next .nuxt .output target
+  coverage .turbo .svelte-kit vendor .venv __pycache__)
+
+# Paths whose hits are records of the code, never something a build runs.
+NOISE_RE='docs/security|/reference/|\.jsonl$|paste-cache|/History/|/logs?/'
+
+cleanup() { [ -n "$WORK" ] && rm -rf -- "$WORK"; }
+trap cleanup EXIT INT TERM
+
+# === Helpers
+
+usage() {
+  cat <<'HELPDOC'
+dev-guard - supply chain backdoor scanner and cleaner
+
+USAGE
+  dev-guard [checks] [scope] [options]
+
+CHECKS
+  --scan         Known payload signature in project source files.
+  --heuristics   Generic tells that catch variants the signature misses:
+                 whitespace-padded lines, a global.<letter> assignment at
+                 end of file, the injected createRequire preamble in .mjs,
+                 and obfuscated _$_ identifiers.
+  --procs        Stray "node -e" and other unexpected node processes.
+  --branches     Local branches not yet rebased onto origin/develop.
+                 Feature branches keep the payload after main is fixed.
+  --supply       Audit npm and pnpm settings that govern whether a
+                 compromised package can execute on install. Also flags
+                 plaintext auth tokens in .npmrc.
+  --clean        Strip the payload from every file --scan and --heuristics
+                 report. Writes a .bak next to each file, then rescans to
+                 prove the result is clean. Needs --yes.
+  --all          Every check above except --clean.
+
+SCOPE
+  (default)      Walk ~/Projects, or --path. Over ~2700 files that is
+                 about 1s for --scan alone, 5s with --heuristics.
+  --staged       Only what is staged for commit, read from the index
+                 rather than the working tree, so a file cleaned after
+                 git add is still caught. About 0.4s. Run inside a repo.
+  --since REF    Only files changed between REF and HEAD, which is what a
+                 pull brought in. Use with ORIG_HEAD after a merge.
+  --path DIR     Walk DIR instead of ~/Projects. Full scope only.
+
+OPTIONS
+  --yes          Actually modify files. Only --clean writes anything, and
+                 without this it just reports what it would rewrite.
+  -h, --help     This text.
+
+EXIT STATUS
+  0  nothing found
+  1  findings, or a clean that could not be verified
+  2  bad usage
+
+EXAMPLES
+  dev-guard --all                          # full read-only sweep
+  dev-guard --scan --heuristics --staged   # pre-commit shaped check
+  dev-guard --scan --since ORIG_HEAD       # what the last pull brought in
+  dev-guard --clean                        # show what would be stripped
+  dev-guard --clean --yes                  # strip it, keeping .bak files
+  dev-guard --scan --path /srv/work        # code kept outside ~/Projects
+
+NOTES
+  A hit in a chat transcript, an editor history folder, or our own
+  docs/security notes is a copy of the signature, not a live payload.
+  Those paths are filtered out. Only a .js, .cjs, .mjs or .ts file inside
+  a project is something a build will load and run.
+HELPDOC
+}
+
+section() { printf '\n\033[1m== %s\033[0m\n' "$1"; }
+ok() { printf '  \033[38;2;1;102;48m✓\033[0m  %s\n' "$1"; }
+warn() { printf '  \033[1;33m!\033[0m  %s\n' "$1"; }
+bad() { printf '  \033[1;31m✗\033[0m  %s\n' "$1"; }
+note() { printf '     \033[2m%s\033[0m\n' "$1"; }
+
+is_source() {
+  case "$1" in
+  *.js | *.cjs | *.mjs | *.ts) return 0 ;;
+  *) return 1 ;;
+  esac
+}
+
+# === File collection
+#
+# Every mode ends at the same place: a NUL-delimited list in $WORK/list.
+# Detection reads that list and never knows which mode produced it.
+
+# REPORT_STRIP is removed from a path before printing, so staged mode shows
+# the repo-relative name rather than the scratch directory it was read into.
+REPORT_STRIP=""
+
+collect_full() {
+  local root="${SCAN_ROOT:-$PROJECTS}" d
+  [ -d "$root" ] || {
+    bad "not a directory: $root"
+    exit 2
+  }
+  local prune=()
+  for d in "${PRUNE_DIRS[@]}"; do
+    prune+=(-name "$d" -o)
+  done
+  unset 'prune[${#prune[@]}-1]'
+
+  find "$root" \( "${prune[@]}" \) -prune -o \
+    -type f \( -name '*.js' -o -name '*.cjs' -o -name '*.mjs' -o -name '*.ts' \) \
+    -print 2>/dev/null | grep -Ev "$NOISE_RE" | tr '\n' '\0' >"$WORK/list"
+}
+
+# Staged content lives in the index, not the working tree. A file fixed
+# after `git add` still commits the bad blob, so the blob is what gets
+# read. Each is written into a scratch tree so one detection path serves
+# every mode.
+collect_staged() {
+  git rev-parse --git-dir >/dev/null 2>&1 || {
+    bad "not inside a git repository"
+    exit 2
+  }
+  local f dest
+  : >"$WORK/list"
+  mkdir -p "$WORK/staged"
+  REPORT_STRIP="$WORK/staged/"
+  while IFS= read -r -d '' f; do
+    is_source "$f" || continue
+    dest="$WORK/staged/$f"
+    mkdir -p "$(dirname "$dest")" 2>/dev/null || continue
+    git show ":$f" >"$dest" 2>/dev/null || continue
+    printf '%s\0' "$dest" >>"$WORK/list"
+  done < <(git diff --cached --name-only -z --diff-filter=ACM 2>/dev/null)
+}
+
+# What a pull brought in. Reads the working tree, since by this point the
+# merge has already written those files to disk.
+collect_since() {
+  git rev-parse --git-dir >/dev/null 2>&1 || {
+    bad "not inside a git repository"
+    exit 2
+  }
+  git rev-parse --verify --quiet "$SINCE_REF" >/dev/null 2>&1 || {
+    bad "no such ref: $SINCE_REF"
+    exit 2
+  }
+  local root f
+  root=$(git rev-parse --show-toplevel 2>/dev/null)
+  : >"$WORK/list"
+  while IFS= read -r -d '' f; do
+    is_source "$f" || continue
+    [ -f "$root/$f" ] || continue
+    printf '%s\0' "$root/$f" >>"$WORK/list"
+  done < <(git diff --name-only -z --diff-filter=ACM "$SINCE_REF" HEAD 2>/dev/null)
+}
+
+collect_files() {
+  case "$MODE" in
+  full) collect_full ;;
+  staged) collect_staged ;;
+  since) collect_since ;;
+  esac
+}
+
+file_count() { tr -dc '\0' <"$WORK/list" | wc -c; }
+
+report_path() { printf '%s' "${1#"$REPORT_STRIP"}"; }
+
+# === Detection
+#
+# grep -lZ over an xargs batch. One process per few thousand files instead
+# of one per file.
+
+grep_list() {
+  xargs -0 -r grep -lZ -E "$1" -- <"$WORK/list" 2>/dev/null | tr '\0' '\n'
+}
+
+# Fixed-string variant. Used as a prefilter where the precise pattern is a
+# bounded repeat, which grep cannot optimise.
+grep_list_fixed() {
+  xargs -0 -r grep -lZ -F "$1" -- <"$WORK/list" 2>/dev/null | tr '\0' '\n'
+}
+
+scan_signature() { grep_list "$IOC_RE"; }
+
+# Emits "reason<TAB>path". First match per file wins, so one file does not
+# produce four near-identical lines.
+scan_heuristics() {
+  local seen="$WORK/seen" f
+  : >"$seen"
+
+  emit() {
+    grep -qxF "$2" "$seen" 2>/dev/null && return
+    printf '%s\n' "$2" >>"$seen"
+    printf '%s\t%s\n' "$1" "$2"
+  }
+
+  # Literal prefilter, then the real test on the few that matched.
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    grep -qE "$PAD_RE" "$f" 2>/dev/null && emit "padded line" "$f"
+  done < <(grep_list_fixed "$PAD_LIT")
+
+  # Batched prefilter, then the end-of-file test on the few that matched.
+  # Position cannot be expressed in a single grep, and the candidate set
+  # after the prefilter is small enough for a tail each.
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    tail -c 4096 "$f" 2>/dev/null | grep -qE "$GLOBAL_RE" &&
+      emit "global assign at EOF" "$f"
+  done < <(grep_list_fixed "$GLOBAL_LIT")
+
+  while IFS= read -r f; do
+    [ -n "$f" ] && emit "obfuscated identifiers" "$f"
+  done < <(grep_list "$OBFUSC_RE")
+
+  # A CommonJS shim so the payload can require() inside an ES module.
+  # Hand-written .mjs almost never needs this.
+  while IFS= read -r -d '' f; do
+    case "$f" in *.mjs) ;; *) continue ;; esac
+    head -c 200 "$f" 2>/dev/null | grep -q "createRequire(import.meta.url)" &&
+      emit "injected createRequire preamble" "$f"
+  done <"$WORK/list"
+}
+
+# === Cleaning
+
+clean_file() {
+  local f="$1"
+  [ -f "$f" ] || return 1
+
+  if [ "$DRY_RUN" -eq 1 ]; then
+    printf '  would clean  %s\n' "$(report_path "$f")"
+    return 0
+  fi
+
+  cp -p -- "$f" "$f.bak" || {
+    bad "could not back up $f, skipped"
+    return 1
+  }
+
+  perl -0pi -e "s/\\s*global\\.o\\s*=\\s*'7-.*\\z//s" "$f"
+  perl -0pi -e "s/\\A(?:\\xEF\\xBB\\xBF)?import \\{ createRequire \\} from 'node:module';\\r?\\nconst require = createRequire\\(import\\.meta\\.url\\);\\r?\\n//" "$f"
+
+  # Stripping to end of file takes the final newline with it. Every
+  # formatter and editorconfig in these repos expects one back.
+  [ -s "$f" ] && [ "$(tail -c 1 "$f")" != "" ] && printf '\n' >>"$f"
+
+  printf '  cleaned      %s \033[2m(backup: %s.bak)\033[0m\n' "$f" "$f"
+  CLEANED=$((CLEANED + 1))
+  return 0
+}
+
+# === Argument parsing
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+  --scan) DO_SCAN=1 ANY=1 ;;
+  --heuristics) DO_HEUR=1 ANY=1 ;;
+  --procs) DO_PROCS=1 ANY=1 ;;
+  --branches) DO_BRANCHES=1 ANY=1 ;;
+  --supply) DO_SUPPLY=1 ANY=1 ;;
+  --clean) DO_CLEAN=1 ANY=1 ;;
+  --all) DO_SCAN=1 DO_HEUR=1 DO_PROCS=1 DO_BRANCHES=1 DO_SUPPLY=1 ANY=1 ;;
+  --staged) MODE="staged" ;;
+  --since)
+    MODE="since"
+    SINCE_REF="${2:?--since needs a ref}"
+    shift
+    ;;
+  --path)
+    SCAN_ROOT="${2:?--path needs a directory}"
+    shift
+    ;;
+  --yes) DRY_RUN=0 ;;
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  *)
+    echo "unknown option: $1" >&2
+    usage >&2
+    exit 2
+    ;;
+  esac
+  shift
+done
+
+[ "$ANY" -eq 0 ] && {
+  usage
+  exit 2
+}
+
+if [ "$DRY_RUN" -eq 0 ] && [ "$DO_CLEAN" -eq 0 ]; then
+  printf '  \033[1;33m!\033[0m  --yes has no effect without --clean. Nothing here writes.\n' >&2
+fi
+
+if [ -n "$SCAN_ROOT" ] && [ "$MODE" != "full" ]; then
+  bad "--path applies to a full scan only, not --staged or --since"
+  exit 2
+fi
+
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/dev-guard.XXXXXX") || exit 2
+
+# Only the file-based checks need a list built.
+NEED_FILES=0
+[ "$DO_SCAN" -eq 1 ] && NEED_FILES=1
+[ "$DO_HEUR" -eq 1 ] && NEED_FILES=1
+[ "$DO_CLEAN" -eq 1 ] && NEED_FILES=1
+[ "$NEED_FILES" -eq 1 ] && collect_files
+
+echo "=== dev-guard"
+case "$MODE" in
+full) echo "scope         : ${SCAN_ROOT:-$PROJECTS}" ;;
+staged) echo "scope         : staged for commit ($(file_count) source file(s))" ;;
+since) echo "scope         : changed since ${SINCE_REF} ($(file_count) source file(s))" ;;
+esac
+if [ "$DO_CLEAN" -eq 1 ]; then
+  if [ "$DRY_RUN" -eq 1 ]; then
+    echo "mode          : DRY RUN (nothing will be written; pass --yes to act)"
+  else
+    echo "mode          : CLEANING"
+  fi
+else
+  echo "mode          : read only"
+fi
+
+# === Signature scan
+
+SIG_HITS=""
+if [ "$DO_SCAN" -eq 1 ] || [ "$DO_CLEAN" -eq 1 ]; then
+  section "Known payload signature"
+  SIG_HITS=$(scan_signature)
+  if [ -n "$SIG_HITS" ]; then
+    while IFS= read -r f; do
+      [ -n "$f" ] && bad "$(report_path "$f")"
+    done <<<"$SIG_HITS"
+    FINDINGS=$((FINDINGS + $(printf '%s\n' "$SIG_HITS" | grep -c .)))
+    note "Send this list to Praise, then run: dev-guard --clean --yes"
+  else
+    ok "no files carry the known signature"
+  fi
+fi
+
+# === Heuristics
+
+HEUR_HITS=""
+if [ "$DO_HEUR" -eq 1 ] || [ "$DO_CLEAN" -eq 1 ]; then
+  section "Tampering heuristics"
+  HEUR_RAW=$(scan_heuristics)
+  if [ -n "$HEUR_RAW" ]; then
+    while IFS=$'\t' read -r reason f; do
+      [ -n "$f" ] || continue
+      warn "$(report_path "$f")"
+      note "$reason"
+    done <<<"$HEUR_RAW"
+    HEUR_HITS=$(printf '%s\n' "$HEUR_RAW" | cut -f2)
+    FINDINGS=$((FINDINGS + $(printf '%s\n' "$HEUR_RAW" | grep -c .)))
+    note "A heuristic hit is a prompt to open the file, not proof of malware."
+  else
+    ok "nothing matched the tampering heuristics"
+  fi
+fi
+
+# === Clean
+
+if [ "$DO_CLEAN" -eq 1 ]; then
+  section "Clean"
+  if [ "$MODE" = "staged" ]; then
+    bad "--clean cannot run against --staged"
+    note "Staged blobs are read from the index into scratch space, so"
+    note "cleaning them would edit a copy. Clean the working tree, then"
+    note "git add the result:  dev-guard --clean --yes"
+    FINDINGS=$((FINDINGS + 1))
+  else
+    TARGETS=$(printf '%s\n%s\n' "$SIG_HITS" "$HEUR_HITS" | grep -v '^$' | sort -u)
+    if [ -z "$TARGETS" ]; then
+      ok "nothing to clean"
+    else
+      while IFS= read -r f; do
+        [ -n "$f" ] && clean_file "$f"
+      done <<<"$TARGETS"
+
+      if [ "$DRY_RUN" -eq 0 ]; then
+        # A clean that does not verify is worse than none, because it is
+        # believed. Rebuild the list first: paths may have changed.
+        collect_files
+        REMAIN=$(scan_signature)
+        if [ -n "$REMAIN" ]; then
+          bad "signature still present after cleaning:"
+          printf '%s\n' "$REMAIN" | sed 's/^/       /'
+          FINDINGS=$((FINDINGS + 1))
+        else
+          ok "rescan clean"
+          CLEAN_VERIFIED=1
+          FINDINGS=0
+          note "Backups kept as .bak. Delete them once you have checked the diff."
+          note "Next: rm -rf node_modules && pnpm install --frozen-lockfile"
+        fi
+      fi
+    fi
+  fi
+fi
+
+# === Processes
+
+if [ "$DO_PROCS" -eq 1 ]; then
+  section "Suspicious processes"
+  PROCS=$(ps -eo pid,etime,cmd 2>/dev/null | grep -E "node +-e|node +--eval" | grep -v grep)
+  if [ -n "$PROCS" ]; then
+    printf '%s\n' "$PROCS" | sed 's/^/  /'
+    warn "kill anything here you do not recognise"
+    FINDINGS=$((FINDINGS + 1))
+  else
+    ok "no 'node -e' processes running"
+  fi
+fi
+
+# === Branches
+
+if [ "$DO_BRANCHES" -eq 1 ]; then
+  section "Branches not rebased onto origin"
+  STALE=0
+  while IFS= read -r gitdir; do
+    repo=$(dirname "$gitdir")
+    base=""
+    for cand in origin/develop origin/main origin/master; do
+      git -C "$repo" rev-parse --verify --quiet "$cand" >/dev/null 2>&1 && {
+        base="$cand"
+        break
+      }
+    done
+    [ -n "$base" ] || continue
+
+    cur=$(git -C "$repo" branch --show-current 2>/dev/null)
+    [ -n "$cur" ] || continue
+    if ! git -C "$repo" merge-base --is-ancestor "$base" "$cur" 2>/dev/null; then
+      behind=$(git -C "$repo" rev-list --count "${cur}..${base}" 2>/dev/null || echo '?')
+      warn "$(basename "$repo") [$cur] is $behind commits behind $base"
+      STALE=$((STALE + 1))
+    fi
+  done < <(find "$PROJECTS" -maxdepth 3 -name .git -type d 2>/dev/null | sort)
+
+  if [ "$STALE" -eq 0 ]; then
+    ok "every checked out branch already contains its base"
+  else
+    note "In each: git fetch origin && git rebase origin/develop"
+    note "Building on an unrebased branch re-runs whatever it still carries."
+    FINDINGS=$((FINDINGS + STALE))
+  fi
+fi
+
+# === Supply chain configuration
+
+if [ "$DO_SUPPLY" -eq 1 ]; then
+  section "Supply chain configuration"
+
+  NPMRC="$HOME/.npmrc"
+  if [ -f "$NPMRC" ]; then
+    if grep -qE '_authToken *= *[A-Za-z0-9_-]{20,}' "$NPMRC" 2>/dev/null; then
+      bad "$NPMRC holds a plaintext auth token"
+      note "Anything running as you can read it, including a build script."
+      note "Revoke it at npmjs.com first, then remove it here. Removing it"
+      note "before revoking breaks installs without closing the exposure."
+      FINDINGS=$((FINDINGS + 1))
+    else
+      ok "no plaintext auth token in ~/.npmrc"
+    fi
+
+    if grep -qE '^(minimum-release-age|minimumReleaseAge)' "$NPMRC" 2>/dev/null; then
+      ok "minimum-release-age is set"
+    else
+      warn "minimum-release-age is not set"
+      note "A compromised version is usually pulled within hours of publish."
+      note "Add to ~/.npmrc:  minimum-release-age=1440"
+      FINDINGS=$((FINDINGS + 1))
+    fi
+  else
+    warn "no ~/.npmrc"
+    note "Add one with:  minimum-release-age=1440"
+    FINDINGS=$((FINDINGS + 1))
+  fi
+
+  UNGUARDED=0
+  while IFS= read -r pkg; do
+    repo=$(dirname "$pkg")
+    grep -q 'onlyBuiltDependencies' "$pkg" 2>/dev/null && continue
+    [ -f "$repo/.npmrc" ] && grep -qE '^ignore-scripts *= *true' "$repo/.npmrc" 2>/dev/null && continue
+    UNGUARDED=$((UNGUARDED + 1))
+  done < <(find "$PROJECTS" -maxdepth 3 -name package.json -not -path '*/node_modules/*' 2>/dev/null)
+
+  if [ "$UNGUARDED" -gt 0 ]; then
+    warn "$UNGUARDED project(s) let any dependency run install scripts"
+    note "Add a pnpm.onlyBuiltDependencies allowlist to package.json, so only"
+    note "packages you name can execute during install."
+    FINDINGS=$((FINDINGS + 1))
+  else
+    ok "every project restricts dependency install scripts"
+  fi
+fi
+
+# === Summary
+
+section "Summary"
+if [ "$CLEAN_VERIFIED" -eq 1 ]; then
+  ok "cleaned $CLEANED file(s), rescan verified"
+  note "A clean scan means your files are clean now, not that nothing ever ran."
+  note "Rotate npm tokens, GitHub PATs, SSH keys and cloud logins regardless."
+  echo
+  exit 0
+fi
+
+if [ "$FINDINGS" -eq 0 ]; then
+  ok "clean"
+  echo
+  exit 0
+fi
+
+bad "$FINDINGS finding(s)"
+note "A clean scan means your files are clean now, not that nothing ever ran."
+note "Rotate npm tokens, GitHub PATs, SSH keys and cloud logins regardless."
+echo
+exit 1

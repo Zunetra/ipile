@@ -1,0 +1,297 @@
+#!/usr/bin/env bash
+# dev-cleanup - reclaim disk from dev caches, build artifacts, and AI agent sessions.
+# Dry run by default. Pass --yes to actually delete.
+
+set -uo pipefail
+
+DAYS=30
+DRY_RUN=1
+DO_AGENTS=0
+DO_TARGETS=0
+DO_MODULES=0
+DO_CACHES=0
+DO_TMP=0
+ANY=0
+
+PROJECTS="$HOME/Projects"
+
+# Paths never touched, matched as substrings against candidate dirs.
+SKIP_PATTERNS=(
+  "/Projects/Drips/SwiftRemit"
+)
+
+TOTAL_BYTES=0
+
+# === Helpers
+
+usage() {
+  cat <<'USAGE'
+Usage: dev-cleanup [options]
+
+Categories (pick one or more, or --all):
+  --agents     AI agent session/history data (Claude, Cursor, Gemini, Copilot, Zed)
+  --targets    Rust/Scarb target/ dirs under ~/Projects
+  --modules    node_modules under ~/Projects
+  --caches     npm / pnpm / yarn / tool caches (never cargo or rustup)
+  --tmp        Stale .bash_history-*.tmp and .claude.json.tmp.* files
+  --all        All of the above
+
+Options:
+  --days N     Age threshold in days (default: 30)
+  --path DIR   Walk DIR instead of ~/Projects
+  --yes        Actually delete. Without this, nothing is removed.
+  -h, --help   Show this help
+
+Examples:
+  dev-cleanup --all                 # see what would be freed
+  dev-cleanup --all --yes           # do it
+  dev-cleanup --agents --days 60 --yes
+USAGE
+}
+
+human() {
+  local b=${1:-0}
+  if [ "$b" -ge 1073741824 ]; then
+    awk -v b="$b" 'BEGIN{printf "%.1fG", b/1073741824}'
+  elif [ "$b" -ge 1048576 ]; then
+    awk -v b="$b" 'BEGIN{printf "%.1fM", b/1048576}'
+  elif [ "$b" -ge 1024 ]; then
+    awk -v b="$b" 'BEGIN{printf "%.1fK", b/1024}'
+  else
+    echo "${b}B"
+  fi
+}
+
+skipped() {
+  local path="$1" pat
+  for pat in "${SKIP_PATTERNS[@]}"; do
+    case "$path" in *"$pat"*) return 0 ;; esac
+  done
+  return 1
+}
+
+dir_bytes() {
+  [ -e "$1" ] || {
+    echo 0
+    return
+  }
+  du -sb "$1" 2>/dev/null | cut -f1 || echo 0
+}
+
+section() {
+  printf '\n\033[1m== %s\033[0m\n' "$1"
+}
+
+# Delete a whole directory, accounting for its size.
+drop_dir() {
+  local path="$1" label="${2:-}"
+  [ -e "$path" ] || return 0
+  skipped "$path" && {
+    printf '  skip (protected)  %s\n' "$path"
+    return 0
+  }
+  local b
+  b=$(dir_bytes "$path")
+  [ "${b:-0}" -eq 0 ] && return 0
+  printf '  %-8s %s %s\n' "$(human "$b")" "$path" "$label"
+  TOTAL_BYTES=$((TOTAL_BYTES + b))
+  [ "$DRY_RUN" -eq 0 ] && rm -rf -- "$path"
+  return 0
+}
+
+# Delete files older than $DAYS inside a directory, then prune empty dirs.
+sweep_old() {
+  local root="$1"
+  [ -d "$root" ] || return 0
+  skipped "$root" && return 0
+  local bytes=0 count=0 f
+  while IFS= read -r -d '' f; do
+    local sz
+    sz=$(stat -c%s "$f" 2>/dev/null || echo 0)
+    bytes=$((bytes + sz))
+    count=$((count + 1))
+    [ "$DRY_RUN" -eq 0 ] && rm -f -- "$f"
+  done < <(find "$root" -type f -mtime +"$DAYS" -print0 2>/dev/null)
+  if [ "$count" -gt 0 ]; then
+    printf '  %-8s %s (%d files older than %dd)\n' "$(human "$bytes")" "$root" "$count" "$DAYS"
+    TOTAL_BYTES=$((TOTAL_BYTES + bytes))
+    [ "$DRY_RUN" -eq 0 ] && find "$root" -mindepth 1 -type d -empty -delete 2>/dev/null
+  fi
+  return 0
+}
+
+# === Argument parsing
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+  --agents)
+    DO_AGENTS=1
+    ANY=1
+    ;;
+  --targets)
+    DO_TARGETS=1
+    ANY=1
+    ;;
+  --modules)
+    DO_MODULES=1
+    ANY=1
+    ;;
+  --caches)
+    DO_CACHES=1
+    ANY=1
+    ;;
+  --tmp)
+    DO_TMP=1
+    ANY=1
+    ;;
+  --all)
+    DO_AGENTS=1
+    DO_TARGETS=1
+    DO_MODULES=1
+    DO_CACHES=1
+    DO_TMP=1
+    ANY=1
+    ;;
+  --days)
+    DAYS="${2:?--days needs a number}"
+    shift
+    ;;
+  --path)
+    PROJECTS="${2:?--path needs a directory}"
+    shift
+    ;;
+  --yes) DRY_RUN=0 ;;
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  *)
+    echo "unknown option: $1" >&2
+    usage
+    exit 1
+    ;;
+  esac
+  shift
+done
+
+if [ "$ANY" -eq 0 ]; then
+  usage
+  exit 1
+fi
+
+echo "=== dev-cleanup"
+echo "age threshold : ${DAYS} days"
+if [ "$DRY_RUN" -eq 1 ]; then
+  echo "mode          : DRY RUN (nothing will be deleted; pass --yes to act)"
+else
+  echo "mode          : DELETING"
+fi
+
+BEFORE_AVAIL=$(df -h / | awk 'NR==2{print $4}')
+
+# === Agents
+
+if [ "$DO_AGENTS" -eq 1 ]; then
+  section "AI agent sessions and history (older than ${DAYS}d)"
+  # Claude Code profiles. Config, memory, skills, and plugins are never swept.
+  for prof in "$HOME"/.claude "$HOME"/.claude[0-9]; do
+    [ -d "$prof" ] || continue
+    for sub in projects file-history shell-snapshots paste-cache telemetry backups _archive statsig; do
+      sweep_old "$prof/$sub"
+    done
+  done
+  # Other agents: only known session/log/cache subpaths, never their config roots.
+  for p in \
+    "$HOME/.cursor/logs" "$HOME/.cursor/CachedData" "$HOME/.cursor/Cache" \
+    "$HOME/.config/Cursor/logs" "$HOME/.config/Cursor/CachedData" \
+    "$HOME/.gemini/tmp" "$HOME/.gemini/logs" "$HOME/.gemini/history" \
+    "$HOME/.copilot/logs" "$HOME/.copilot/history-session-state" \
+    "$HOME/.local/share/zed/conversations" "$HOME/.local/share/zed/logs" \
+    "$HOME/.claude-server-commander/logs"; do
+    sweep_old "$p"
+  done
+fi
+
+# === Rust / Scarb build artifacts
+
+if [ "$DO_TARGETS" -eq 1 ]; then
+  section "Build artifacts: target/ dirs untouched for ${DAYS}d"
+  while IFS= read -r d; do
+    parent=$(dirname "$d")
+    # Only a real Rust/Cairo build dir, never a stray folder named "target".
+    { [ -f "$parent/Cargo.toml" ] || [ -f "$parent/Scarb.toml" ]; } || continue
+    drop_dir "$d" "(rebuild with cargo/scarb build)"
+  done < <(find "$PROJECTS" -type d -name target -prune -mtime +"$DAYS" 2>/dev/null)
+fi
+
+# === node_modules
+
+if [ "$DO_MODULES" -eq 1 ]; then
+  section "node_modules untouched for ${DAYS}d"
+  while IFS= read -r d; do
+    drop_dir "$d" "(reinstall with npm/pnpm install)"
+  done < <(find "$PROJECTS" -type d -name node_modules -prune -mtime +"$DAYS" 2>/dev/null)
+fi
+
+# === Package manager and tool caches
+
+if [ "$DO_CACHES" -eq 1 ]; then
+  section "Package manager and tool caches"
+  echo "  note: caches are cleared wholesale; the age threshold does not apply here"
+
+  b=$(dir_bytes "$HOME/.npm/_cacache")
+  if [ "${b:-0}" -gt 0 ]; then
+    printf '  %-8s %s\n' "$(human "$b")" "npm _cacache"
+    TOTAL_BYTES=$((TOTAL_BYTES + b))
+    if [ "$DRY_RUN" -eq 0 ]; then
+      command -v npm >/dev/null 2>&1 && npm cache clean --force >/dev/null 2>&1 || rm -rf "$HOME/.npm/_cacache"
+    fi
+  fi
+
+  drop_dir "$HOME/.npm/_npx"
+  drop_dir "$HOME/.npm/_logs"
+
+  if command -v pnpm >/dev/null 2>&1; then
+    echo "  running: pnpm store prune"
+    [ "$DRY_RUN" -eq 0 ] && pnpm store prune >/dev/null 2>&1
+  fi
+
+  # Tool caches. Deliberately excludes ~/.cargo and ~/.rustup: Rust stays intact.
+  for c in BraveSoftware ms-playwright ms-playwright-go puppeteer aws yarn node \
+    next-swc typescript google-chrome hardhat-nodejs pnpm; do
+    drop_dir "$HOME/.cache/$c"
+  done
+fi
+
+# === Stale temp files
+
+if [ "$DO_TMP" -eq 1 ]; then
+  section "Stale temp files"
+  bytes=0
+  count=0
+  while IFS= read -r -d '' f; do
+    sz=$(stat -c%s "$f" 2>/dev/null || echo 0)
+    bytes=$((bytes + sz))
+    count=$((count + 1))
+    [ "$DRY_RUN" -eq 0 ] && rm -f -- "$f"
+  done < <(find "$HOME" -maxdepth 1 \( -name '.bash_history-*.tmp' -o -name '.claude.json.tmp.*' \) -print0 2>/dev/null)
+  if [ "$count" -gt 0 ]; then
+    printf '  %-8s %d stale temp files in %s\n' "$(human "$bytes")" "$count" "$HOME"
+    TOTAL_BYTES=$((TOTAL_BYTES + bytes))
+  else
+    echo "  none found"
+  fi
+fi
+
+# === Summary
+
+AFTER_AVAIL=$(df -h / | awk 'NR==2{print $4}')
+section "Summary"
+if [ "$DRY_RUN" -eq 1 ]; then
+  echo "  would reclaim : $(human "$TOTAL_BYTES")"
+  echo "  disk free now : $BEFORE_AVAIL"
+  echo "  re-run with --yes to delete"
+else
+  echo "  reclaimed     : $(human "$TOTAL_BYTES")"
+  echo "  disk free     : $BEFORE_AVAIL -> $AFTER_AVAIL"
+fi

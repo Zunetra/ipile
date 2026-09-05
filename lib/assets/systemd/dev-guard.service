@@ -1,0 +1,15 @@
+# Daily supply chain sweep. Installed by the ipile guard module, which
+# only enables it when asked -- see lib/modules/guard.sh.
+
+[Unit]
+Description=dev-guard supply chain sweep
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/dev-guard --all
+# dev-guard exits 1 when it finds something. That is the point: the unit
+# shows as failed in `systemctl --user status dev-guard.service`, which is
+# how a sweep nobody is watching still gets noticed.
+SuccessExitStatus=0
+Nice=10
+IOSchedulingClass=idle

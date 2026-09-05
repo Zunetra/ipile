@@ -83,6 +83,7 @@ echo "Linting with $SHELLCHECK"
   lib/update.sh \
   lib/assets/hooks/pre-commit \
   lib/assets/hooks/pre-push \
-  lib/assets/shell/*.sh
+  lib/assets/shell/*.sh \
+  lib/assets/bin/*
 
 echo "shellcheck: 0 findings"

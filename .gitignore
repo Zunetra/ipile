@@ -435,6 +435,12 @@ FodyWeavers.xsd
 !bin/
 !bin/ipile
 
+# The **/[Bb]in/* rule above (vendored boilerplate) also eats
+# lib/assets/bin/, which is shipped source (dev-guard), not a build
+# output, despite the directory name.
+!lib/assets/bin/
+!lib/assets/bin/*
+
 # === Node and local tooling
 node_modules/
 

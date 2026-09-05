@@ -6,10 +6,16 @@
     "scripts/shfmt.sh",
     "scripts/shellcheck-files.sh"
   ],
+  "lib/assets/bin/*": [
+    "bash -n",
+    "scripts/shfmt.sh",
+    "scripts/shellcheck-files.sh"
+  ],
   ".husky/pre-*": [
     "bash -n",
     "scripts/shfmt.sh",
     "scripts/shellcheck-files.sh"
   ],
-  "*.{json,md,yml,yaml}": ["prettier --write"]
+  "*.{json,md,yml,yaml}": ["prettier --write"],
+  "*.{js,cjs,mjs,ts}": ["scripts/supply-chain-check.sh"]
 }

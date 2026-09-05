@@ -12,7 +12,7 @@ Org-level decisions, including how ipile is distributed, live in
 correction is appended under the section it belongs to. Corrections are
 authoritative and outrank anything stated elsewhere.
 
-**Last updated:** 2026-08-19
+**Last updated:** 2026-09-05
 
 ---
 
@@ -39,7 +39,7 @@ and skipped, not re-run.
 | Module                                                                 | Needs         |
 | ---------------------------------------------------------------------- | ------------- |
 | `git-identity`, `git-accounts`, `git-hooks`, `git-globals`, `dotfiles` | `git-install` |
-| `pkgmanagers`                                                          | `node`        |
+| `pkgmanagers`, `guard`                                                 | `node`        |
 
 **A failed module does not abort the run, but it does reach the caller.**
 The runner reports the failure and continues, so one broken step cannot
@@ -369,6 +369,94 @@ co-authorship attribution.
 **`bin/` is in the global gitignore this tool itself installs**, so
 `bin/ipile` needs the negation that is now in `.gitignore`. Check that
 before assuming a file is committed.
+
+---
+
+## Guard: the scanner never cleans on its own
+
+`lib/modules/guard.sh` installs `lib/assets/bin/dev-guard`, the backdoor
+scanner and cleaner. The full incident writeup, performance numbers, and
+the reasoning behind every check live in `reference/README.md` and are
+not repeated here.
+
+**A finding is never cleaned automatically, not even under `--yes`.**
+`apply` runs the scan as part of the module like anything else, but
+cleaning is a separate confirm every time, because `--yes` means "don't
+ask about running the scan," not "don't ask before rewriting files
+across a dozen repos." A non-interactive run that finds something reports
+it and points at `dev-guard --clean --yes`, and leaves it there.
+
+**`detect` reads unit files and `~/.npmrc`, never the scanner.** Running
+`dev-guard --all` from `detect` would make `ipile status` re-walk every
+project on the machine on every render. Whether the daily timer is
+enabled is read from the `timers.target.wants` symlink systemd itself
+creates, same reasoning as the `rustup`/`systemctl` trap above: the first
+call to a user bus can start a session manager, so unit state is read off
+disk, never asked of `systemctl`.
+
+**The daily timer is opt-in and systemd-only.** Enabling a background job
+is a real side effect and gets its own confirm inside `apply`, separate
+from the confirm to install the module at all. On darwin it is not
+offered; `describe` says so rather than the module carrying a launchd
+implementation nobody has tested. The timer's `ExecStart` scans the
+default `~/Projects`, not whatever the user gave `projects_root` -- the
+unit is a static asset compared byte for byte in `detect`, so a
+per-machine path cannot be templated into it without breaking that check.
+`cleanup`, below, needed a per-machine path in its unit and solved it
+differently.
+
+**`projects_root` is shared state, not a `guard`-only setting.** It lives
+in `lib/core/projects.sh`, asked once by whichever of `guard` or
+`cleanup` needs it first, and stored under a name neither module
+namespaces to itself. Two modules asking the same question twice, or
+worse landing on different answers, is its own bug.
+
+---
+
+## Cleanup: generated units, not shipped ones
+
+`lib/modules/cleanup.sh` installs `lib/assets/bin/dev-cleanup` the same
+way `guard` installs its scanner, but its systemd units are not shipped
+assets. `guard`'s timer always scans the same fixed path, so its unit
+can be a static file `detect` compares byte for byte. `cleanup`'s unit
+has to bake in whatever age threshold, interval, and projects root the
+user chose, so `lib/modules/cleanup.sh` generates the unit text itself
+from state, in `cleanup_service_content`/`cleanup_timer_content`.
+`detect` calls the same functions to regenerate the expected text and
+diffs it against what's on disk -- still read-only, still no `systemctl`
+call, just comparing two strings instead of two files.
+
+**Manual and automatic are a real fork, not a flag.** `apply` asks the
+mode before anything else. Manual mode installs the script and runs it
+once; automatic additionally writes and enables the timer. Switching
+modes on a later run is how you change your mind: auto to manual tears
+the units down (`cleanup_disable_timer`) rather than leaving a timer
+nothing points at, and manual to auto installs them.
+
+**The age threshold is asked every run, but only ever answered once.**
+`ui_ask_int`'s default comes from `state_get cleanup_age`, not a literal
+30, so a saved answer becomes next run's default and `--yes` (which
+takes a prompt's default without asking, by `ui_ask_int`'s own existing
+contract) silently reuses it. No special-casing lives in `cleanup.sh`
+for this -- it falls out of feeding a stateful default into a helper
+that already had this behaviour.
+
+**Deleting always needs a separate confirm, even under `--yes`, exactly
+like `guard`'s clean step.** `--yes` skips being asked whether to run
+the sweep, not whether to act on what it found. The one deliberate
+exception is the _scheduled_ invocation: the unit's `ExecStart` already
+carries `--yes` to `dev-cleanup`, because enabling the timer in the first
+place was the confirmation, given once, for every run it will ever make
+unattended.
+
+**Automatic mode's scheduler install is gated on connectivity, not
+assumed.** Enabling the timer itself needs no network, but a machine
+missing `systemctl`/`loginctl` needs a package installed to get them,
+and that install needs one. `cleanup_apply_auto` checks
+`curl -s --head --connect-timeout 5 https://github.com` (same check
+`preflight` already runs) before calling `os_pm_install`, and if either
+the connection or the scheduler still isn't there afterward, falls back
+to running once and says so, rather than failing the module outright.
 
 ---
 

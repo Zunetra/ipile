@@ -1,0 +1,15 @@
+# Runs the sweep once a day. See reference/README.md.
+
+[Unit]
+Description=Daily dev-guard supply chain sweep
+
+[Timer]
+OnCalendar=daily
+# Catches up after the laptop was asleep at the scheduled time, which on a
+# development machine is most of the time.
+Persistent=true
+# Spread the start so it never lands exactly on login.
+RandomizedDelaySec=30m
+
+[Install]
+WantedBy=timers.target

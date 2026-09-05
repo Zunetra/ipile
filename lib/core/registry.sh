@@ -21,7 +21,7 @@
 # behaviour can live and it is lib/core.
 
 # The canonical order. Dependencies run before dependents.
-IPILE_MODULES="system rust node pkgmanagers git-install git-identity git-accounts git-hooks git-globals dotfiles"
+IPILE_MODULES="system rust node pkgmanagers git-install git-identity git-accounts git-hooks git-globals dotfiles guard cleanup"
 
 # The user asked to stop. A distinct code rather than an exit, so core
 # never decides how the program ends: the runner propagates it and the

@@ -332,7 +332,7 @@ command line flags on every run.
 
 ## 🧩 The modules
 
-Ten, run in this order. Dependencies come before dependents.
+Twelve, run in this order. Dependencies come before dependents.
 
 | Module         | What it changes                                                         |
 | -------------- | ----------------------------------------------------------------------- |
@@ -346,6 +346,8 @@ Ten, run in this order. Dependencies come before dependents.
 | `git-hooks`    | Global hooks, plus `gclone`, `gremote` and `gitprofile`                 |
 | `git-globals`  | 30 git settings and 11 aliases, version gated                           |
 | `dotfiles`     | VS Code, Prettier, solhint, lint-staged, gitignore                      |
+| `guard`        | dev-guard scanner, npm hardening, an opt-in daily sweep                 |
+| `cleanup`      | Disk reclaim from caches and build artifacts, manual or scheduled       |
 
 Every module implements the same four functions, which is what makes the
 menu, `status`, `doctor` and `--dry-run` all work without special cases:
@@ -717,9 +719,11 @@ ipile/
 │   │   ├── fs.sh              Writes, backups, and the --dry-run wrapper
 │   │   ├── state.sh           What a run did, read by status and update
 │   │   ├── identity.sh        The four sources a git profile lives in
+│   │   ├── projects.sh        Where your projects live, asked once, shared
 │   │   └── registry.sh        Module ordering and MODULE_NEEDS resolution
-│   ├── modules/               Ten modules, one contract
-│   ├── assets/                Config files, hooks and shell helpers
+│   ├── modules/               Twelve modules, one contract
+│   ├── assets/                Config files, hooks, shell helpers, and the
+│   │                          standalone dev-guard / dev-cleanup binaries
 │   ├── manifest.sh            Every pinned version, in one place
 │   ├── doctor.sh              Verify everything, change nothing
 │   └── update.sh              Self update, checksum verified
@@ -759,6 +763,9 @@ pnpm dry              # the plan against your real machine, writes nothing
 pnpm dry:yes          # same, no prompts
 ```
 
+A dry run leads with the same module status table `ipile status` prints,
+so you see what is already in place before the plan for the rest.
+
 ```sh
 pnpm demo             # the full interactive flow, into /tmp/ipile-demo
 pnpm demo:accounts    # just the git accounts flow, which is the one to watch
@@ -783,6 +790,7 @@ than in the fake home.
 | Script               | What it runs                                |
 | -------------------- | ------------------------------------------- |
 | `pnpm start`         | `ipile` from the checkout, interactive menu |
+| `pnpm run help`      | `ipile help`, the command reference         |
 | `pnpm status`        | `ipile status`                              |
 | `pnpm doctor`        | `ipile doctor`                              |
 | `pnpm dry`           | `ipile run --dry-run`                       |

@@ -47,6 +47,8 @@
   "scripts": {
     "prepare": "husky",
     "start": "./bin/ipile",
+    "help": "./bin/ipile help",
+    "usage": "./bin/ipile help",
     "status": "./bin/ipile status",
     "doctor": "./bin/ipile doctor",
     "dry": "./bin/ipile run --dry-run",
@@ -56,7 +58,7 @@
     "demo:doctor": "HOME=/tmp/ipile-demo ./bin/ipile doctor",
     "demo:tree": "find /tmp/ipile-demo -maxdepth 2 2>/dev/null || echo 'no sandbox yet, run: pnpm demo'",
     "demo:clean": "rm -rf /tmp/ipile-demo",
-    "check": "bash -n bin/ipile lib/*.sh lib/core/*.sh lib/modules/*.sh lib/assets/shell/*.sh lib/assets/hooks/pre-commit lib/assets/hooks/pre-push",
+    "check": "bash -n bin/ipile lib/*.sh lib/core/*.sh lib/modules/*.sh lib/assets/shell/*.sh lib/assets/bin/* lib/assets/hooks/pre-commit lib/assets/hooks/pre-push",
     "lint": "scripts/shellcheck.sh",
     "lint:install": "scripts/shellcheck.sh --install",
     "format": "scripts/shfmt.sh && prettier --write .",

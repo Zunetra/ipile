@@ -64,6 +64,19 @@ valid_freetext() {
   return 0
 }
 
+# valid_dir <string>. Exists and is a directory, once a leading ~ is
+# expanded. The projects-root prompt expects the output of `pwd`, pasted
+# straight from a terminal already sitting in the folder, but a leading
+# ~ is accepted too since that is the other thing people type by hand.
+valid_dir() {
+  local p="$1"
+  case "$p" in
+    '~') p="$HOME" ;;
+    '~/'*) p="${HOME}/${p#\~/}" ;;
+  esac
+  [ -d "$p" ]
+}
+
 # === Normalisers
 
 # gh_normalize_username <string>. The prompt asks for a username, but a

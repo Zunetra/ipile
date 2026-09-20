@@ -3,7 +3,7 @@
 # checked anything about the machine it landed on.
 set -eu
 
-BASE_URL="${IPILE_BASE_URL:-https://shogo-portfolio-ebon.vercel.app/scripts}"
+BASE_URL="${IPILE_BASE_URL:-https://github.com/Zunetra/ipile/releases/latest/download}"
 INSTALL_DIR="$HOME/.ipile"
 BIN_DIR="$HOME/.local/bin"
 TMP="$(mktemp -d)"

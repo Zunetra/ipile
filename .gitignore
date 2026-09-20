@@ -456,6 +456,11 @@ node_modules/
 # Run state, logs and backups from a checkout-local run
 var/
 
+# Release artifacts. build-and-install.sh produces these locally; the
+# release workflow is what publishes them, not the repo tree.
+/ipile.tar.gz
+/SHA256SUMS
+
 # === Ignored File Paths
 docs/Screens/
 
@@ -527,3 +532,7 @@ $RECYCLE.BIN/
 
 
 
+
+# === AI agent / editor tool directories
+.kilo/
+.agents/

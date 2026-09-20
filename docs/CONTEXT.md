@@ -465,9 +465,5 @@ to running once and says so, rather than failing the module outright.
 - **Distribution.** Only the shell installer exists. npm, the Homebrew
   tap, and the crates.io wrapper are unbuilt. See
   [handbook 0004](../../handbook/decisions/0004-distribution-channels.md).
-- **Hosting.** Install and update both verify SHA256, but nothing
-  publishes a `SHA256SUMS` at the URL yet, so both warn and continue
-  rather than protecting anyone. Until `version.txt` v4.0 is published,
-  every command also prints a spurious update notice.
 - **`ipile uninstall --revert`.** `ipile restore` covers files. Nothing
   yet reverses git config keys.

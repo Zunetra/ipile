@@ -5,7 +5,7 @@
 # supply chain hole, and it is multiplied by everyone who installs this.
 set -uo pipefail
 
-BASE_URL="BASE_URL_PLACEHOLDER"
+BASE_URL="https://github.com/Zunetra/ipile/releases/latest/download"
 INSTALL_DIR="$HOME/.ipile"
 CURRENT="$(cat "${INSTALL_DIR}/VERSION" 2>/dev/null || printf 'unknown')"
 

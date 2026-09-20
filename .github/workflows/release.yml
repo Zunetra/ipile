@@ -1,0 +1,35 @@
+name: Release
+
+# Builds and publishes an ipile release the moment a version tag lands.
+# The artifact is built with the shipped build-and-install.sh, which
+# also embeds BASE_URL into bin/ipile and lib/update.sh, so the
+# download URL below must match where this workflow uploads to.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build release artifact
+        env:
+          IPILE_BASE_URL: https://github.com/Zunetra/ipile/releases/latest/download
+        run: ./build-and-install.sh
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ipile.tar.gz
+            SHA256SUMS
+            version.txt
+            installer.sh

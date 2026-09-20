@@ -15,7 +15,7 @@ runner is a separate tool, [culm](https://github.com/Zunetra/culm).
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 ```sh
-curl -fsSL https://shogo-portfolio-ebon.vercel.app/scripts/installer.sh | sh
+curl -fsSL https://github.com/Zunetra/ipile/releases/latest/download/installer.sh | sh
 ipile
 ```
 
@@ -165,7 +165,7 @@ repository is a script runner for people working on ipile, nothing more.
 ## 🚀 Install
 
 ```sh
-curl -fsSL https://shogo-portfolio-ebon.vercel.app/scripts/installer.sh | sh
+curl -fsSL https://github.com/Zunetra/ipile/releases/latest/download/installer.sh | sh
 ```
 
 The installer downloads the tarball, **verifies it against a published
@@ -314,7 +314,7 @@ Two deliberate exceptions:
 ```sh
 # Where the installer and the update check fetch from. Set it to run
 # your own mirror, or to test a release before publishing it.
-IPILE_BASE_URL="https://shogo-portfolio-ebon.vercel.app/scripts"
+IPILE_BASE_URL="https://github.com/Zunetra/ipile/releases/latest/download"
 
 # Where state, run logs and backups live. Defaults to $IPILE_HOME/var.
 # Point it elsewhere to keep the install directory read only.
@@ -727,6 +727,8 @@ ipile/
 │   ├── manifest.sh            Every pinned version, in one place
 │   ├── doctor.sh              Verify everything, change nothing
 │   └── update.sh              Self update, checksum verified
+├── .github/
+│   └── workflows/release.yml  Builds and publishes a release on a v* tag
 ├── scripts/
 │   └── shellcheck.sh          Lint, fetching a static binary if needed
 ├── docs/
@@ -831,10 +833,17 @@ Releasing:
 
 1. Edit the scripts, and `lib/manifest.sh` if a pinned version moved
 2. Bump `version.txt`
-3. `pnpm build`
-4. Publish `installer.sh`, `ipile.tar.gz`, `version.txt` and
-   **`SHA256SUMS`** at the base URL
-5. Push
+3. Push a tag matching `v*`, for example `v4.0`
+4. `.github/workflows/release.yml` builds the artifact with
+   `IPILE_BASE_URL` set to the GitHub Releases download URL, then uploads
+   `ipile.tar.gz`, `SHA256SUMS`, `version.txt` and `installer.sh` to the
+   release
+
+The workflow exists so the URL embedded in `bin/ipile` and `lib/update.sh`
+matches where the assets are uploaded. To build locally, run
+`pnpm build` with `IPILE_BASE_URL` set. **Without it, `build-and-install.sh`
+still defaults to the old personal host**, so a local build is not a
+release build.
 
 `SHA256SUMS` is not optional. `update.sh` refuses to install an
 unverified download.
@@ -850,10 +859,9 @@ Recorded here rather than implied. See
   crates.io channel needs a thin Rust wrapper, because crates.io will not
   host a bash project and rewriting a machine bootstrap in Rust would
   need a toolchain the machine does not have yet.
-- **GitHub Releases.** Install and update both verify SHA256, but nothing
-  publishes a `SHA256SUMS` at the URL yet, so both warn and continue
-  rather than protecting anyone. A personal deploy is also a single point
-  of failure for everyone's setup.
+- **A published release.** The workflow is in place. Until a `v*` tag has
+  been pushed and its assets exist, the install URL above returns nothing.
+  Confirm a release exists before relying on it.
 - **`ipile uninstall --revert`.** `ipile restore` covers files. Nothing
   yet reverses git config keys.
 
@@ -913,7 +921,7 @@ nothing needs to be: your git config, SSH keys, hooks and home directory
 config files are all where v3 left them, and v4 detects them.
 
 ```sh
-curl -fsSL https://shogo-portfolio-ebon.vercel.app/scripts/installer.sh | sh
+curl -fsSL https://github.com/Zunetra/ipile/releases/latest/download/installer.sh | sh
 ipile status     # see what v4 thinks is already done
 ipile doctor     # see what v3 left broken
 ```

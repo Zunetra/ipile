@@ -6,6 +6,31 @@ set -eu
 BASE_URL="${IPILE_BASE_URL:-https://github.com/Zunetra/ipile/releases/latest/download}"
 INSTALL_DIR="$HOME/.ipile"
 BIN_DIR="$HOME/.local/bin"
+# === Already installed
+#
+# Same contract as rustup: a second run of the one liner points at the
+# updater instead of unpacking over a working install. IPILE_FORCE_INSTALL
+# is the escape hatch for repairing an install that cannot update itself.
+
+if [ -f "${INSTALL_DIR}/VERSION" ] && [ -z "${IPILE_FORCE_INSTALL:-}" ]; then
+  current="$(tr -d '[:space:]' <"${INSTALL_DIR}/VERSION")"
+  latest="$(curl -fsSL "${BASE_URL}/version.txt" 2>/dev/null | tr -d '[:space:]' || true)"
+
+  if [ -z "$latest" ]; then
+    echo "ipile ${current} is already installed."
+    echo "Run: ipile update  to check for a newer version"
+  elif [ "$latest" = "$current" ]; then
+    echo "ipile ${current} is already installed and up to date."
+  else
+    echo "ipile ${current} is already installed."
+    echo "${latest} is available. Run: ipile update"
+  fi
+  echo ""
+  echo "To reinstall anyway:"
+  echo "  curl -fsSL ${BASE_URL}/installer.sh | IPILE_FORCE_INSTALL=1 sh"
+  exit 0
+fi
+
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 

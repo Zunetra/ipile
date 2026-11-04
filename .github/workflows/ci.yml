@@ -1,0 +1,78 @@
+name: CI
+
+# The same suite the pre-push hook runs, plus a real install, on both
+# platforms ipile supports. The pre-push hook only proves it passed on the
+# pusher's machine; v1.0.0 shipped a crash that only appeared behind the
+# ~/.local/bin symlink, and nothing had run it on macOS at all.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Test
+        run: pnpm test
+
+      - name: Format
+        run: pnpm format:check
+
+      # Builds the tarball, publishes it to a local folder and runs the
+      # real installer into a throwaway HOME, so the untar, the symlink and
+      # the already-installed path are all exercised as a user would hit
+      # them.
+      - name: Install smoke test
+        run: |
+          rel="$(mktemp -d)"
+          home="$(mktemp -d)"
+          IPILE_BASE_URL="file://${rel}" bash build-and-install.sh
+          cp ipile.tar.gz SHA256SUMS version.txt installer.sh "$rel/"
+          export IPILE_BASE_URL="file://${rel}"
+
+          HOME="$home" sh installer.sh
+          test "$(HOME="$home" "$home/.local/bin/ipile" version)" = "$(cat version.txt)"
+          HOME="$home" "$home/.local/bin/ipile" status
+
+          HOME="$home" sh installer.sh | grep -q "already installed"
+          HOME="$home" IPILE_FORCE_INSTALL=1 sh installer.sh | grep -q "Checksum verified"
+
+      # macOS ships bash 3.2 at /bin/bash, the oldest bash ipile promises
+      # to run on. The runner's PATH bash is newer, so call it directly.
+      - name: bash 3.2 through a symlink
+        if: runner.os == 'macOS'
+        run: |
+          /bin/bash --version | head -1
+          link="$(mktemp -d)/ipile"
+          ln -s "$PWD/bin/ipile" "$link"
+          test "$(/bin/bash "$link" version 2>&1)" = "dev"

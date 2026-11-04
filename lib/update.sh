@@ -5,7 +5,13 @@
 # supply chain hole, and it is multiplied by everyone who installs this.
 set -uo pipefail
 
-BASE_URL="https://github.com/Zunetra/ipile/releases/latest/download"
+UPDATE_LIB="$(cd -P -- "$(dirname "$0")" >/dev/null 2>&1 && pwd)"
+# shellcheck source=/dev/null
+. "${UPDATE_LIB}/core/validate.sh"
+
+# IPILE_BASE_URL first, so a mirror or a test release works for updates
+# the same way it does for the installer. The build fills in the rest.
+BASE_URL="${IPILE_BASE_URL:-BASE_URL_PLACEHOLDER}"
 INSTALL_DIR="$HOME/.ipile"
 CURRENT="$(cat "${INSTALL_DIR}/VERSION" 2>/dev/null || printf 'unknown')"
 
@@ -22,6 +28,13 @@ echo "Latest:  ${LATEST}"
 
 if [ "$CURRENT" = "$LATEST" ]; then
   echo "Already up to date."
+  exit 0
+fi
+
+# Different is not the same as newer. Without this a local build ahead of
+# the release would be replaced by the older published one.
+if ! version_newer "$LATEST" "$CURRENT"; then
+  echo "Installed ${CURRENT} is newer than published ${LATEST}. Nothing to do."
   exit 0
 fi
 

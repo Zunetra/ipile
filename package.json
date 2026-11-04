@@ -1,6 +1,6 @@
 {
   "name": "ipile",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "description": "Machine bootstrap and git completion. Toolchains, git identities, hooks and global config, one skippable step at a time.",
@@ -65,7 +65,8 @@
     "format:check": "scripts/shfmt.sh --check && prettier --check .",
     "format:install": "scripts/shfmt.sh --install",
     "build": "bash build-and-install.sh",
-    "test": "pnpm run check && pnpm run lint"
+    "symlink": "scripts/symlink-check.sh",
+    "test": "pnpm run check && pnpm run lint && pnpm run symlink"
   },
   "validate-branch-name": {
     "pattern": "^(main|develop|live)$|^(feature|fix|refactor|hotfix|release|conflict|chore)/.*$",

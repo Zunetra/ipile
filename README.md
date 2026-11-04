@@ -235,6 +235,15 @@ $HOME/.ipile/
 $HOME/.local/bin/ipile     Symlink
 ```
 
+Running the one liner again on a machine that already has ipile changes
+nothing. Like rustup, it prints the installed version and, if a newer
+one is published, tells you to run `ipile update`. To reinstall over the
+top, for example to repair an install that cannot update itself:
+
+```sh
+curl -fsSL https://github.com/Zunetra/ipile/releases/latest/download/installer.sh | IPILE_FORCE_INSTALL=1 sh
+```
+
 Nothing is installed system wide. `sudo` is only used later, by the
 `system` module, for your package manager.
 
@@ -359,6 +368,10 @@ IPILE_BASE_URL="https://github.com/Zunetra/ipile/releases/latest/download"
 # Where state, run logs and backups live. Defaults to $IPILE_HOME/var.
 # Point it elsewhere to keep the install directory read only.
 IPILE_VAR="$HOME/.ipile/var"
+
+# Any value makes the installer reinstall over an existing ~/.ipile
+# instead of pointing at ipile update. var/ survives either way.
+IPILE_FORCE_INSTALL=1
 
 # Any value disables colour, per no-color.org. Colour is also dropped
 # automatically when stdout is not a terminal, so piping is already clean.
@@ -902,7 +915,7 @@ Releasing:
 1. Edit the scripts, and `lib/manifest.sh` if a pinned version moved
 2. Bump `version.txt`
 3. Push a tag matching `v*` that equals `version.txt`, for example
-   `v1.0.0`. The workflow fails if they differ
+   `v1.0.1`. The workflow fails if they differ
 4. `.github/workflows/release.yml` builds the artifact with
    `IPILE_BASE_URL` set to the GitHub Releases download URL, then uploads
    `ipile.tar.gz`, `SHA256SUMS`, `version.txt` and `installer.sh` to the
@@ -940,6 +953,13 @@ Recorded here rather than implied. See
 A running shell does not re-read its rc file. `source ~/.bashrc`, or
 restart the terminal. `ipile doctor` checks whether `~/.local/bin` is
 actually on your `PATH`.
+
+### `No such file or directory` for `~/.local/lib/...`
+
+v1.0.0 resolved its install directory from the `~/.local/bin` symlink
+instead of the file it points to, so every command failed. `ipile update`
+is broken by the same bug, so reinstall once with
+`IPILE_FORCE_INSTALL=1` (see [Install](#install)). Fixed in v1.0.1.
 
 ### Commits are signed but show unverified
 

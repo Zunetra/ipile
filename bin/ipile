@@ -9,7 +9,21 @@
 #
 set -uo pipefail
 
-SCRIPT_DIR="$(cd -- "$(dirname "$0")" >/dev/null 2>&1 && pwd -P)"
+# Follow the ~/.local/bin/ipile symlink back to the real install, or
+# IPILE_HOME lands on ~/.local and no lib/ path resolves. pwd -P only
+# resolves symlinked directories, not the file, and readlink -f is
+# missing from older macOS, so the chain is walked by hand.
+SOURCE="$0"
+while [ -L "$SOURCE" ]; do
+  LINK_DIR="$(cd -P -- "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  case "$SOURCE" in
+    /*) ;;
+    *) SOURCE="${LINK_DIR}/${SOURCE}" ;;
+  esac
+done
+SCRIPT_DIR="$(cd -P -- "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+unset SOURCE LINK_DIR
 IPILE_HOME="$(dirname "$SCRIPT_DIR")"
 IPILE_LIB="${IPILE_HOME}/lib"
 IPILE_VAR="${IPILE_VAR:-${IPILE_HOME}/var}"
@@ -395,10 +409,12 @@ STATUS=$?
 
 # === Update notice
 #
-# Never fatal, and never printed for help, which exits above.
-if [ "$COMMAND" != "version" ] && [ "$COMMAND" != "--version" ]; then
-  LATEST="$(curl -fsSL BASE_URL_PLACEHOLDER/version.txt 2>/dev/null || printf '')"
-  if [ -n "$LATEST" ] && [ "$LATEST" != "$IPILE_VERSION" ]; then
+# Never fatal, and never printed for help, which exits above. Skipped after
+# update too: IPILE_VERSION was read before the update ran, so it would
+# announce the version that was just installed.
+if [ "$COMMAND" != "version" ] && [ "$COMMAND" != "--version" ] && [ "$COMMAND" != "update" ]; then
+  LATEST="$(curl -fsSL "${IPILE_BASE_URL:-BASE_URL_PLACEHOLDER}/version.txt" 2>/dev/null || printf '')"
+  if [ -n "$LATEST" ] && version_newer "$LATEST" "$IPILE_VERSION"; then
     echo ""
     echo "Update available: ${LATEST}  (run: ipile update)"
   fi

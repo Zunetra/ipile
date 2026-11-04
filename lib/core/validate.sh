@@ -198,3 +198,27 @@ forge_suggest() {
 
   [ -n "$best" ] && printf '%s' "$best"
 }
+
+# === Versions
+
+# version_newer <candidate> <current>. 0 when candidate is a strictly newer
+# vMAJOR.MINOR.PATCH than current, compared numerically so v1.0.10 beats
+# v1.0.9. A candidate that is not plain numeric is never newer, so a
+# garbled version.txt cannot trigger an update. A current that is not
+# numeric ('dev', 'unknown') is always older, so a broken install can
+# still be offered the release.
+version_newer() {
+  local cand="${1#v}" curr="${2#v}" i c k
+  case "$cand" in '' | *[!0-9.]*) return 1 ;; esac
+  case "$curr" in '' | *[!0-9.]*) return 0 ;; esac
+
+  for i in 1 2 3; do
+    c="$(printf '%s' "$cand" | cut -d. -f"$i")"
+    k="$(printf '%s' "$curr" | cut -d. -f"$i")"
+    c="${c:-0}"
+    k="${k:-0}"
+    [ "$c" -gt "$k" ] && return 0
+    [ "$c" -lt "$k" ] && return 1
+  done
+  return 1
+}

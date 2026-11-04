@@ -1,6 +1,6 @@
 {
   "name": "ipile",
-  "version": "4.0.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "Machine bootstrap and git completion. Toolchains, git identities, hooks and global config, one skippable step at a time.",
@@ -35,7 +35,7 @@
     "node": ">=20",
     "pnpm": ">=10"
   },
-  "packageManager": "pnpm@11.13.0",
+  "packageManager": "pnpm@12.16.1",
   "directories": {
     "bin": "bin",
     "lib": "lib",

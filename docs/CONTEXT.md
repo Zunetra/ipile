@@ -155,7 +155,7 @@ still yields exactly eleven aliases and no duplicate rc functions.
 **Destructive operations refuse to run non-interactively.** `restore`
 declining under `IPILE_ASSUME_YES` is correct behaviour, not a bug.
 
-**Config content lives once, in `lib/assets/`.** The v3 tool kept its own
+**Config content lives once, in `lib/assets/`.** The old scripts kept their own
 copy of the same six config files in each of two scripts, and they
 drifted. One of the drifts, `~/.ssh/allowed_signers` being written by one
 script and not the other, meant a machine could sign commits correctly
@@ -229,7 +229,7 @@ A profile is not one thing. It is four, and they drift independently:
 - the keypair actually on disk
 
 **Reconcile all four and print the table before asking for anything
-new.** The v3 tool globbed `~/.gitconfig-*` only, so it could not see a
+new.** The old scripts globbed `~/.gitconfig-*` only, so it could not see a
 profile listed in `~/.gitidentities` with no key, a key with no `Host`
 block, or a `Host` block pointing at a key that had been deleted. Drift
 detection and repair both work against all four.

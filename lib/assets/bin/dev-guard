@@ -118,6 +118,12 @@ EXAMPLES
   dev-guard --clean --yes                  # strip it, keeping .bak files
   dev-guard --scan --path /srv/work        # code kept outside ~/Projects
 
+  Whole home folder (every project, download and config dir you own):
+  dev-guard --scan --heuristics --path ~   # scan only
+  dev-guard --clean --path ~               # dry run: show what would be stripped
+  dev-guard --clean --yes --path ~         # scan and clean, keeping .bak files,
+                                           # then rescan to prove it is clean
+
 NOTES
   A hit in a chat transcript, an editor history folder, or our own
   docs/security notes is a copy of the signature, not a live payload.

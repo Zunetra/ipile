@@ -87,7 +87,7 @@ verify_checksum
 
 echo "Installing..."
 mkdir -p "$INSTALL_DIR"
-tar -xzf "${TMP}/ipile.tar.gz" -C "$INSTALL_DIR" --overwrite
+tar -xzf "${TMP}/ipile.tar.gz" -C "$INSTALL_DIR"
 printf '%s\n' "$LATEST" >"${INSTALL_DIR}/VERSION"
 
 echo "Updated to ${LATEST}. Restart your terminal."

@@ -1,54 +1,70 @@
-# ipile
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/ipile-logo-dark.svg"/>
+    <img src="docs/assets/ipile-logo.svg" alt="ipile" width="300"/>
+  </picture>
+</p>
 
-**Machine bootstrap and git completion.** One command that takes a
-machine from wherever it is to a working development setup: toolchains,
-git identities, SSH keys, commit signing that actually verifies, hooks,
-and a set of global editor configs.
+<h3 align="center">Machine bootstrap and git completion.</h3>
 
-`ipile` is Yoruba for _foundation_. Plain ASCII everywhere a machine
-reads it, never the diacritic form. The workspace scaffolder and task
-runner is a separate tool, [culm](https://github.com/Zunetra/culm).
+<p align="center">
+  Toolchains · Git identities · Signing that verifies · Hooks that chain · Dry run and backups<br/>
+  <b>One command that takes a machine from wherever it is to a working development setup, one skippable step at a time.</b>
+</p>
 
-![Version](https://img.shields.io/badge/version-v4.0-blue)
-![Shell](https://img.shields.io/badge/shell-bash%203.2%2B-green)
-![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macOS-lightgrey)
-![License](https://img.shields.io/badge/license-MIT-green)
+<p align="center">
+  <a href="https://github.com/Zunetra/ipile/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Zunetra/ipile?color=016630&label=release"/></a>
+  <a href="https://github.com/Zunetra/ipile/actions/workflows/release.yml"><img alt="Release workflow" src="https://github.com/Zunetra/ipile/actions/workflows/release.yml/badge.svg"/></a>
+  <a href="./LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue.svg"/></a>
+  <img alt="bash 3.2+" src="https://img.shields.io/badge/bash-3.2%2B-4EAA25.svg?logo=gnubash&logoColor=white"/>
+  <img alt="Linux and macOS" src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS-555555.svg?logo=linux&logoColor=white"/>
+  <img alt="Node 24 LTS" src="https://img.shields.io/badge/node-24%20LTS-339933.svg?logo=nodedotjs&logoColor=white"/>
+  <img alt="pnpm 12" src="https://img.shields.io/badge/pnpm-12.x-F69220.svg?logo=pnpm&logoColor=white"/>
+  <img alt="shellcheck clean" src="https://img.shields.io/badge/shellcheck-0%20findings-brightgreen.svg"/>
+  <img alt="SHA256 verified downloads" src="https://img.shields.io/badge/downloads-SHA256%20verified-0A7BBB.svg"/>
+</p>
 
 ```sh
 curl -fsSL https://github.com/Zunetra/ipile/releases/latest/download/installer.sh | sh
 ipile
 ```
 
-> **v4.0 is a rewrite.** The two monolithic scripts became ten
-> independent modules. Everything is now skippable, re-runnable, and
-> reachable on its own. See [Migrating from v3](#-migrating-from-v3).
+`ipile` is Yoruba for _foundation_. Plain ASCII everywhere a machine
+reads it, never the diacritic form. The workspace scaffolder and task
+runner is a separate tool, [culm](https://github.com/Zunetra/culm).
+
+> **Replaces `dev-setup.sh` and `git-multiple-accounts.sh`.** The two
+> monolithic scripts became twelve independent modules. Everything is
+> skippable, re-runnable, and reachable on its own. See
+> [Migrating from dev-setup.sh](#migrating-from-dev-setupsh).
 
 ---
 
-## 📖 Table of contents
+## Table of contents
 
-- [What it is](#-what-it-is)
-- [Features](#-features)
-- [Requirements](#-requirements)
-- [Install](#-install)
-- [Using it](#-using-it)
-- [Command reference](#-command-reference)
-- [Environment variables](#-environment-variables)
-- [The modules](#-the-modules)
-- [Pinned versions](#-pinned-versions)
-- [Git accounts](#-git-accounts)
-- [Safety](#-safety)
-- [Architecture](#-architecture)
-- [Repository layout](#-repository-layout)
-- [Local development](#-local-development)
-- [Build and release](#-build-and-release)
-- [Troubleshooting](#-troubleshooting)
-- [Migrating from v3](#-migrating-from-v3)
-- [Contributing](#-contributing)
-- [Organisation](#-organisation)
-- [Licence](#-licence)
+- [What it is](#what-it-is)
+- [How it works](#how-it-works)
+- [Features](#features)
+- [Requirements](#requirements)
+- [Install](#install)
+- [Using it](#using-it)
+- [Command reference](#command-reference)
+- [Environment variables](#environment-variables)
+- [The modules](#the-modules)
+- [Pinned versions](#pinned-versions)
+- [Git accounts](#git-accounts)
+- [Safety](#safety)
+- [Architecture](#architecture)
+- [Repository layout](#repository-layout)
+- [Local development](#local-development)
+- [Build and release](#build-and-release)
+- [Troubleshooting](#troubleshooting)
+- [Migrating from dev-setup.sh](#migrating-from-dev-setupsh)
+- [Contributing](#contributing)
+- [Organisation](#organisation)
+- [Licence](#licence)
 
-## 🌍 What it is
+## What it is
 
 A set of bash modules behind one command. Each module is a self contained
 unit that knows four things about itself: what it changes, whether it is
@@ -68,7 +84,31 @@ Two things follow from that:
   blocks are detected before being appended, and every file is backed up
   before it is overwritten.
 
-## ✨ Features
+## How it works
+
+```mermaid
+flowchart TD
+    A["curl installer.sh | sh"] --> B[Download ipile.tar.gz]
+    B --> C{Matches SHA256SUMS?}
+    C -- no --> X[Refuse to install]
+    C -- yes --> D["Unpack to ~/.ipile<br/>link ~/.local/bin/ipile"]
+    D --> E[ipile]
+    E --> F[Next module]
+    F --> G["detect()"]
+    G -- already applied --> N[Reported as done]
+    G -- missing or partial --> H{Prompt}
+    H -- skip --> N
+    H -- yes --> I["apply()<br/>every write backed up first"]
+    I --> J["verify()"]
+    J --> N
+    N --> F
+```
+
+Every write goes through one helper, so `--dry-run` shows the whole run
+without touching the machine, and `ipile restore` can put any overwritten
+file back.
+
+## Features
 
 ### Toolchains
 
@@ -127,7 +167,7 @@ Two things follow from that:
   fails mid-merge
 - Entirely optional. Skip the module and your git behaviour is untouched
 
-### Safety
+### Safe to re-run
 
 - `--dry-run` on every write path, provably creating zero files
 - A timestamped backup of every file before it is overwritten, and
@@ -145,11 +185,11 @@ Two things follow from that:
 - `ipile doctor`, which verifies rather than assumes: that signing
   verifies, that each hook chains, that no profile has drifted
 
-## ✅ Requirements
+## Requirements
 
 | Requirement                | Note                                            |
 | -------------------------- | ----------------------------------------------- |
-| **bash 3.2 or newer**      | macOS's stock bash works. v3 needed bash 4      |
+| **bash 3.2 or newer**      | macOS's stock bash works                        |
 | **Linux or macOS**         | apt, dnf, pacman, apk, zypper or brew           |
 | **`curl`**                 | Install, update, and the remote installers      |
 | **`ssh` and `ssh-keygen`** | Keys, agent, connection test                    |
@@ -162,7 +202,7 @@ terminal restarts. Windows outside WSL is not supported.
 Node is **not** a requirement. ipile is bash. `package.json` in this
 repository is a script runner for people working on ipile, nothing more.
 
-## 🚀 Install
+## Install
 
 ```sh
 curl -fsSL https://github.com/Zunetra/ipile/releases/latest/download/installer.sh | sh
@@ -205,9 +245,9 @@ rm -rf "$HOME/.ipile" "$HOME/.local/bin/ipile"
 ```
 
 That removes ipile. To undo what it configured, restore the backups
-first with `ipile restore` (see [Safety](#-safety)).
+first with `ipile restore` (see [Safety](#safety)).
 
-## 🧭 Using it
+## Using it
 
 Three ways in, all running the same modules.
 
@@ -264,7 +304,7 @@ ipile restore                 # list the runs
 ipile restore 20260814-212711 # put that run's files back
 ```
 
-## 📋 Command reference
+## Command reference
 
 | Command                  | What it does                                |
 | ------------------------ | ------------------------------------------- |
@@ -309,7 +349,7 @@ Two deliberate exceptions:
   reports rather than gates, and exiting non-zero would kill a shell
   running under `set -e` that only wanted to read the output.
 
-## ⚙️ Environment variables
+## Environment variables
 
 ```sh
 # Where the installer and the update check fetch from. Set it to run
@@ -330,24 +370,41 @@ exported to the modules. Setting it yourself is unsupported and mostly
 ineffective: `IPILE_DRY_RUN` and `IPILE_ASSUME_YES` are reset from the
 command line flags on every run.
 
-## 🧩 The modules
+## The modules
 
 Twelve, run in this order. Dependencies come before dependents.
 
-| Module         | What it changes                                                         |
-| -------------- | ----------------------------------------------------------------------- |
-| `system`       | System packages and build tools                                         |
-| `rust`         | rustup, the stable toolchain, rustfmt, clippy                           |
-| `node`         | nvm, then Node 24 as the default, per [the manifest](#-pinned-versions) |
-| `pkgmanagers`  | Corepack, pnpm, yarn                                                    |
-| `git-install`  | Git itself                                                              |
-| `git-identity` | One identity: name, email, SSH key, signing                             |
-| `git-accounts` | Several identities, one per remote                                      |
-| `git-hooks`    | Global hooks, plus `gclone`, `gremote` and `gitprofile`                 |
-| `git-globals`  | 30 git settings and 11 aliases, version gated                           |
-| `dotfiles`     | VS Code, Prettier, solhint, lint-staged, gitignore                      |
-| `guard`        | dev-guard scanner, npm hardening, an opt-in daily sweep                 |
-| `cleanup`      | Disk reclaim from caches and build artifacts, manual or scheduled       |
+```mermaid
+flowchart LR
+    gi[git-install] --> gid[git-identity]
+    gi --> gac[git-accounts]
+    gi --> gh[git-hooks]
+    gi --> gg[git-globals]
+    gi --> df[dotfiles]
+    nd[node] --> pm[pkgmanagers]
+    nd --> gd[guard]
+    sy[system]
+    rs[rust]
+    cl[cleanup]
+```
+
+An arrow points from a module to the ones that declare it in
+`MODULE_NEEDS`. `system`, `rust` and `cleanup` stand alone.
+
+| Module         | What it changes                                                        |
+| -------------- | ---------------------------------------------------------------------- |
+| `system`       | System packages and build tools                                        |
+| `rust`         | rustup, the stable toolchain, rustfmt, clippy                          |
+| `node`         | nvm, then Node 24 as the default, per [the manifest](#pinned-versions) |
+| `pkgmanagers`  | Corepack, pnpm, yarn                                                   |
+| `git-install`  | Git itself                                                             |
+| `git-identity` | One identity: name, email, SSH key, signing                            |
+| `git-accounts` | Several identities, one per remote                                     |
+| `git-hooks`    | Global hooks, plus `gclone`, `gremote` and `gitprofile`                |
+| `git-globals`  | 30 git settings and 11 aliases, version gated                          |
+| `dotfiles`     | VS Code, Prettier, solhint, lint-staged, gitignore                     |
+| `guard`        | dev-guard scanner, npm hardening, an opt-in daily sweep                |
+| `cleanup`      | Disk reclaim from caches and build artifacts, manual or scheduled      |
 
 Every module implements the same four functions, which is what makes the
 menu, `status`, `doctor` and `--dry-run` all work without special cases:
@@ -369,7 +426,7 @@ Because `doctor` calls the same `verify()` the installer does, the
 diagnostic and the installer can never disagree about what "installed"
 means.
 
-## 📌 Pinned versions
+## Pinned versions
 
 Everything ipile installs at a fixed version is declared in one file,
 `lib/manifest.sh`. Read it to know exactly what will land on your
@@ -378,7 +435,7 @@ machine.
 | Variable               | Value     | What it pins                                     |
 | ---------------------- | --------- | ------------------------------------------------ |
 | `IPILE_NODE_VERSION`   | `24`      | Node major, installed and set as the nvm default |
-| `IPILE_NVM_VERSION`    | `v0.40.7` | The nvm installer, fetched by tag                |
+| `IPILE_NVM_VERSION`    | `v0.40.8` | The nvm installer, fetched by tag                |
 | `IPILE_PNPM_VERSION`   | `latest`  | Corepack shim target                             |
 | `IPILE_YARN_VERSION`   | `stable`  | Corepack shim target                             |
 | `IPILE_RUST_TOOLCHAIN` | `stable`  | rustup channel                                   |
@@ -399,7 +456,7 @@ the manifest a complete answer rather than half of one.
 To change what a machine gets, edit `lib/manifest.sh`, run `pnpm dry` to
 see the effect, then release. No module hardcodes a version.
 
-## 🔑 Git accounts
+## Git accounts
 
 The problem: several git identities on one machine, and never having to
 think about which one is active.
@@ -416,6 +473,28 @@ Host github-work
 
 Clone through `gclone` and the alias is baked into that repository's
 `.git/config`. Every future push uses the right key, with no switching.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor You
+    participant G as git
+    participant H as Global pre-commit hook
+    participant I as ~/.gitidentities
+    participant S as ssh
+    You->>G: gclone https://github.com/acme/api
+    Note over G: origin is github-work:acme/api.git
+    You->>G: git commit (first time in this repo)
+    G->>H: Run hook
+    H->>I: Look up github-work
+    I-->>H: Name and email
+    H->>G: Set local name, email and SSH signing key
+    H->>H: Hand over to the repo's own pre-commit
+    You->>G: git push
+    G->>S: Connect to github-work
+    S->>S: Host block picks id_ed25519_work
+    Note over You,S: Pushed with the work key, signature verified via allowed_signers
+```
 
 ### It reads before it writes
 
@@ -465,8 +544,8 @@ them, then:
 
 That last step is why signing verifies. Signing and verifying are
 separate settings: without an allowed signers file git signs correctly
-and then reports "No signature", which reads as a signing failure. v3's
-multi account script never wrote it, so every multi account machine had
+and then reports "No signature", which reads as a signing failure. The old
+`git-multiple-accounts.sh` never wrote it, so every multi account machine had
 this bug.
 
 ### What the prompts accept
@@ -605,7 +684,7 @@ first exports into the current shell, lasting until you close it and
 reaching every repository you touch from it. The second writes to this
 repository's config, surviving new shells and affecting nothing else.
 
-## 🛡️ Safety
+## Safety
 
 | Guarantee                           | How                                                                                        |
 | ----------------------------------- | ------------------------------------------------------------------------------------------ |
@@ -619,11 +698,11 @@ repository's config, surviving new shells and affecting nothing else.
 ### Hooks do not break your other hooks
 
 `core.hooksPath` is global: once set, git stops looking in `.git/hooks`
-entirely. v3 installed a `pre-commit` that chained to the repo's own hook
+entirely. The old scripts installed a `pre-commit` that chained to the repo's own hook
 but a `pre-push` that did not, and installed no other hook types at all,
 which silently disabled husky, lefthook and commitlint machine wide.
 
-v4 installs **sixteen** hook types, every client-side hook a developer
+ipile installs **sixteen** hook types, every client-side hook a developer
 machine can fire except two, and each one hands over to the repository's
 own hook of the same name, passing arguments and stdin through and
 propagating the exit code. `ipile doctor` checks that the chaining is
@@ -650,48 +729,33 @@ unset `core.hooksPath` in that repository. The server-side hooks
 never run on a developer's machine, and `fsmonitor-watchman` is selected
 by `core.fsmonitor` rather than found in the hooks directory.
 
-## 🏗️ Architecture
+## Architecture
 
 One dispatcher, a core that every module shares, and modules that know
 nothing about each other.
 
-```
-                       bin/ipile
-                    the dispatcher
-                          |
-        +-----------------+-----------------+
-        |                 |                 |
-   cmd_menu           cmd_run          cmd_status
-   cmd_<module>       cmd_doctor       cmd_restore
-        |                 |                 |
-        +--------+--------+-----------------+
-                 |
-          lib/core/registry.sh
-   resolves MODULE_NEEDS, orders, prompts, runs
-                 |
-   +-------------+-------------+
-   |             |             |
-describe()   detect()      apply()   verify()
-   |             |             |          |
-   +-------------+------+------+----------+
-                        |
-                   lib/core/
-    ui.sh    prompts and every line of output
-    validate.sh  pure predicates, no output, no tty
-    os.sh    which OS, which package manager
-    fs.sh    every write, every backup, --dry-run
-    state.sh what a run did, for status and update
-    identity.sh  the four sources of a git profile
-                        |
-                  lib/manifest.sh
-        every pinned version, data not logic
-                        |
-                   lib/assets/
-      the config files, hooks and shell helpers,
-      as real files rather than heredocs
+```mermaid
+flowchart TD
+    CLI["bin/ipile<br/>the dispatcher"] --> CMD["menu · run · one module<br/>status · doctor · restore"]
+    CMD --> REG["lib/core/registry.sh<br/>resolves MODULE_NEEDS, orders, prompts, runs"]
+    REG --> MOD["lib/modules/*.sh<br/>describe · detect · apply · verify"]
+    MOD --> CORE
+    MOD --> MAN["lib/manifest.sh<br/>every pinned version"]
+    MOD --> AS["lib/assets/<br/>configs, hooks, shell helpers"]
+    subgraph CORE["lib/core"]
+        UI["ui.sh<br/>prompts and output"]
+        VAL["validate.sh<br/>pure predicates"]
+        OS["os.sh<br/>OS and package manager"]
+        FS["fs.sh<br/>writes, backups, dry run"]
+        ST["state.sh<br/>what a run did"]
+        ID["identity.sh<br/>git profile sources"]
+        PJ["projects.sh<br/>where projects live"]
+    end
+    FS --> HOME[(Your home directory)]
+    ST --> VAR[("var/<br/>run logs and backups")]
 ```
 
-Three properties fall out of that shape:
+Four properties fall out of that shape:
 
 - **`--dry-run` cannot be forgotten.** No module writes directly. They
   all go through `fs.sh`, so a new module inherits dry run and backups
@@ -705,7 +769,9 @@ Three properties fall out of that shape:
   predicates that print nothing and read nothing. Prompting, retrying and
   every message live in `ui.sh`.
 
-## 🗂️ Repository layout
+## Repository layout
+
+**Stack:** bash 3.2 · POSIX sh installer · shellcheck · shfmt · Prettier · husky · lint-staged · GitHub Actions
 
 ```
 ipile/
@@ -730,9 +796,11 @@ ipile/
 ├── .github/
 │   └── workflows/release.yml  Builds and publishes a release on a v* tag
 ├── scripts/
-│   └── shellcheck.sh          Lint, fetching a static binary if needed
+│   ├── shellcheck.sh          Lint, fetching a static binary if needed
+│   └── shfmt.sh               Format, fetching a static binary if needed
 ├── docs/
-│   └── CONTEXT.md             Conventions, safety rules, why v4 is shaped so
+│   ├── assets/                Logo, light and dark
+│   └── CONTEXT.md             Conventions, safety rules, why ipile is shaped so
 ├── installer.sh               What the curl one liner runs
 ├── build-and-install.sh       Packs the tarball and writes SHA256SUMS
 ├── version.txt                The published version, polled by update
@@ -743,7 +811,7 @@ ipile/
 Nothing shipped is generated from a heredoc. What you read in this
 repository is what runs on the machine.
 
-## 💻 Local development
+## Local development
 
 ipile needs no Node to run. `package.json` exists only so the commands
 you use while working on it have names.
@@ -813,7 +881,7 @@ downloads a static binary into `.tools/`, detecting linux or darwin and
 x86_64 or aarch64. It **fails** when it cannot lint, unlike
 `build-and-install.sh`, which prints a skip notice and carries on.
 
-## 🔨 Build and release
+## Build and release
 
 ```sh
 pnpm build            # or: bash build-and-install.sh
@@ -825,7 +893,7 @@ error aborts the build, because a tarball that ships one installs
 cleanly and then breaks on someone else's machine.
 
 The version comes from `version.txt`, and the same string is packed as
-`VERSION`, so the two cannot drift the way they could in v3. Keep
+`VERSION`, so the two cannot drift. Keep
 `package.json`'s `version` in step with it by hand; nothing enforces
 that yet.
 
@@ -833,7 +901,8 @@ Releasing:
 
 1. Edit the scripts, and `lib/manifest.sh` if a pinned version moved
 2. Bump `version.txt`
-3. Push a tag matching `v*`, for example `v4.0`
+3. Push a tag matching `v*` that equals `version.txt`, for example
+   `v1.0.0`. The workflow fails if they differ
 4. `.github/workflows/release.yml` builds the artifact with
    `IPILE_BASE_URL` set to the GitHub Releases download URL, then uploads
    `ipile.tar.gz`, `SHA256SUMS`, `version.txt` and `installer.sh` to the
@@ -841,9 +910,8 @@ Releasing:
 
 The workflow exists so the URL embedded in `bin/ipile` and `lib/update.sh`
 matches where the assets are uploaded. To build locally, run
-`pnpm build` with `IPILE_BASE_URL` set. **Without it, `build-and-install.sh`
-still defaults to the old personal host**, so a local build is not a
-release build.
+`pnpm build`. `IPILE_BASE_URL` defaults to the same GitHub Releases URL;
+set it only to build for a mirror.
 
 `SHA256SUMS` is not optional. `update.sh` refuses to install an
 unverified download.
@@ -865,7 +933,7 @@ Recorded here rather than implied. See
 - **`ipile uninstall --revert`.** `ipile restore` covers files. Nothing
   yet reverses git config keys.
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 ### `ipile: command not found` right after installing
 
@@ -914,37 +982,38 @@ You are piping to something that is not a terminal but forcing colour
 somewhere upstream. Set `NO_COLOR=1`. Colour is dropped automatically
 when stdout is not a terminal.
 
-## 📦 Migrating from v3
+## Migrating from dev-setup.sh
 
 Run the installer again. Nothing is migrated automatically because
 nothing needs to be: your git config, SSH keys, hooks and home directory
-config files are all where v3 left them, and v4 detects them.
+config files are all where the old scripts left them, and ipile detects
+them.
 
 ```sh
 curl -fsSL https://github.com/Zunetra/ipile/releases/latest/download/installer.sh | sh
-ipile status     # see what v4 thinks is already done
-ipile doctor     # see what v3 left broken
+ipile status     # see what ipile thinks is already done
+ipile doctor     # see what the old scripts left broken
 ```
 
-`ipile doctor` will most likely flag two things v3 left behind:
+`ipile doctor` will most likely flag two things the old scripts left behind:
 
 - **No `allowed_signers`**, if you used `git-multiple-accounts`. Fix with
   `ipile git identity`.
-- **Hooks that do not chain**, if you used v3's hook system. Fix with
+- **Hooks that do not chain**, if you used the old hook system. Fix with
   `ipile git-hooks`.
 
 The old command names still work and forward to the new ones:
 
-| v3                            | v4                   |
+| Old                           | New                  |
 | ----------------------------- | -------------------- |
 | `ipile dev-setup`             | `ipile run`          |
 | `ipile git-multiple-accounts` | `ipile git accounts` |
 
-The two v3 scripts, `dev-setup.sh` and `git-multiple-accounts.sh`, are
+The two old scripts, `dev-setup.sh` and `git-multiple-accounts.sh`, are
 gone. They duplicated seven config files between them and had already
-drifted apart. That duplication is what v4 exists to remove.
+drifted apart. That duplication is what ipile exists to remove.
 
-## 🤝 Contributing
+## Contributing
 
 Read [docs/CONTEXT.md](docs/CONTEXT.md) first. It holds the module
 contract, the safety rules, and the bugs that are not to be
@@ -977,7 +1046,7 @@ pnpm test        # bash -n, then shellcheck at zero findings
 pnpm demo        # exercise the flow you changed, in the sandbox
 ```
 
-## 🏛️ Organisation
+## Organisation
 
 ipile is a [Zunetra](https://github.com/Zunetra/handbook) project. Org level decisions, including
 naming, distribution channels and the README standard, live in that
@@ -985,6 +1054,6 @@ repository. The sibling projects are [culm](https://github.com/Zunetra/culm), th
 scaffolder and task runner, and [Klassivox](https://github.com/Zunetra/Klassivox), the school
 management platform.
 
-## 📄 Licence
+## Licence
 
 MIT. See [LICENSE](LICENSE).

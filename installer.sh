@@ -46,7 +46,7 @@ else
   echo "WARNING: no SHA256SUMS published. The download is unverified."
 fi
 
-tar -xzf "${TMP}/ipile.tar.gz" -C "$INSTALL_DIR" --overwrite
+tar -xzf "${TMP}/ipile.tar.gz" -C "$INSTALL_DIR"
 ln -sf "${INSTALL_DIR}/bin/ipile" "${BIN_DIR}/ipile"
 chmod +x "${INSTALL_DIR}/bin/ipile"
 
@@ -59,7 +59,7 @@ PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
 for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
   [ -f "$rc" ] || continue
   if ! grep -qF "$PATH_LINE" "$rc" 2>/dev/null; then
-    printf '\n%s\n' "$PATH_LINE" >> "$rc"
+    printf '\n%s\n' "$PATH_LINE" >>"$rc"
     echo "Added ~/.local/bin to PATH in $(basename "$rc")"
   fi
 done

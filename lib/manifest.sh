@@ -23,7 +23,7 @@ IPILE_NODE_VERSION="24"
 # The nvm installer is fetched by tag, never from a moving branch, so a
 # rerun months later installs what was tested rather than whatever main
 # happens to hold.
-IPILE_NVM_VERSION="v0.40.7"
+IPILE_NVM_VERSION="v0.40.8"
 
 # === Corepack shims
 #

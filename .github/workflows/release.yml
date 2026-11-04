@@ -18,15 +18,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+
+      # A tag that disagrees with version.txt would ship a release whose
+      # packed VERSION is not the release name.
+      - name: Check tag matches version.txt
+        run: |
+          version="$(tr -d '[:space:]' < version.txt)"
+          if [ "$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match version.txt (${version})."
+            exit 1
+          fi
 
       - name: Build release artifact
         env:
           IPILE_BASE_URL: https://github.com/Zunetra/ipile/releases/latest/download
-        run: ./build-and-install.sh
+        run: bash build-and-install.sh
 
       - name: Upload release assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             ipile.tar.gz
